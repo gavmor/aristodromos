@@ -1,3 +1,5 @@
+> ⚠ WARNING: Almost entirely hypothetical, at this point, and almost certain to be abandoned, soon. ⚠ 
+
 # Aristrodomos
 > Aristodromos (n.)  
 > /əˌristəˈdrōməs/  
