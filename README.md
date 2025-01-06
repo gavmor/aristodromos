@@ -1,6 +1,7 @@
 > ⚠ WARNING: Almost entirely hypothetical, at this point, and almost certain to be abandoned, soon. ⚠ 
 
-# Aristrodomos
+# Aristodromos
+
 > Aristodromos (n.)  
 > /əˌristəˈdrōməs/  
 > plural: Aristodromoi  
@@ -13,8 +14,7 @@
 > Etymology: From Ancient Greek ἄριστος (aristos) "best" + δρόμος (dromos) "course, way, path" Usage: "The philosopher argued that virtue was the aristodromos to eudaimonia."
 
 ## Usage
-1. Click icon to activate.
-1. Provide goal.
+1. Browse web as normal.
 1. Follow or ignore advice.
 
 ## Installation
