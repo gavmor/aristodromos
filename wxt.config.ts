@@ -8,13 +8,14 @@ export default defineConfig({
     description: '__MSG_extension_description__',
     host_permissions: [],
     name: '__MSG_extension_name__',
-    permissions: [],
+    permissions: ['storage'],
   },
   modules: [
     '@wxt-dev/module-react',
     '@wxt-dev/auto-icons',
     '@wxt-dev/i18n/module',
   ],
+  runner: { startUrls: ['https://chooseyourstory.com/story/viewer/default.aspx?StoryId=11246'] },
   srcDir: 'src',
   vite: () => ({
     plugins: [tailwindcss() as any],
