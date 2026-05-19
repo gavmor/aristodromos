@@ -1,3 +1,9 @@
 export default defineBackground(() => {
-  console.log('Hello from background!', { id: browser.runtime.id });
+  browser.runtime.onInstalled.addListener((details) => {
+    console.log('hello world (from onInstalled)', { reason: details.reason });
+  });
+
+  setInterval(() => {
+    console.log('hello world (from background interval)');
+  }, 5000);
 });

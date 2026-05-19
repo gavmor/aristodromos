@@ -4,4 +4,7 @@ import { defineConfig } from 'wxt';
 export default defineConfig({
   manifestVersion: 3,
   srcDir: '.',
+  manifest: {
+    host_permissions: ['<all_urls>'],
+  },
 });
