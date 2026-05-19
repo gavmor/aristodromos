@@ -11,6 +11,7 @@ const strategy: AgentStrategy = new RandomClickStrategy();
 let lifecycleStatus: LifecycleStatus = 'idle';
 let memories: string[] = [];
 let activeAIController: AbortController | null = null;
+let paused = false;
 
 function logStatus(s: LifecycleStatus) {
   lifecycleStatus = s;
@@ -22,9 +23,27 @@ export default defineBackground(() => {
   console.log(`[Agent] Using strategy: ${strategy.name}`);
   memories = ['Browser automation agent initialized', 'Goal: Explore page and interact with elements'];
 
+  // Show running badge on startup
+  browser.action.setBadgeText({ text: '▶' });
+  browser.action.setBadgeBackgroundColor({ color: '#2e7d32' });
+
+  // ACTION: click extension icon to pause/resume the agent
+  browser.action.onClicked.addListener(async () => {
+    paused = !paused;
+    await browser.action.setBadgeText({ text: paused ? '⏸' : '▶' });
+    await browser.action.setBadgeBackgroundColor({ color: paused ? '#666' : '#2e7d32' });
+    console.log(`[Action] Agent ${paused ? 'paused' : 'resumed'}`);
+  });
+
   // PROCESSOR: handle SCENE_UPDATED from content
   browser.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
     if (message.direction !== 'C2B' || message.type !== 'SCENE_UPDATED') return;
+
+    // When paused, ignore scene updates silently
+    if (paused) {
+      sendResponse({ status: 'paused' });
+      return false;
+    }
 
     const { scene, schema } = message.payload as {
       scene: { newInformation: string[]; affordances: Record<string, any> };

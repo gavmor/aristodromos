@@ -6,5 +6,6 @@ export default defineConfig({
   srcDir: '.',
   manifest: {
     host_permissions: ['<all_urls>'],
+    action: {},
   },
 });
