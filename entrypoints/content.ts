@@ -3,12 +3,28 @@ export default defineContentScript({
   runAt: 'document_idle',
   allFrames: false,
   main(ctx) {
-    const intervalId = setInterval(() => {
+    let value = 0;
+
+    const intervalId = setInterval(async () => {
       if (ctx.isInvalidated) {
         clearInterval(intervalId);
         return;
       }
-      console.log('hello world (from content script)');
+
+      try {
+        const response = await browser.runtime.sendMessage({
+          type: 'ping',
+          value,
+        });
+
+        if (response.type === 'pong') {
+          // Non-idempotent: Math.random() produces different results on each call
+          value = response.value + Math.random();
+          console.log('cs: sent →', response.value, '| next →', value);
+        }
+      } catch (err) {
+        console.error('cs: ping-pong failed', err);
+      }
     }, 5000);
 
     ctx.onInvalidated(() => {
