@@ -3,7 +3,8 @@ export default defineContentScript({
   runAt: 'document_idle',
   allFrames: false,
   main(ctx) {
-    let value = 0;
+    // Derive initial value from the DOM: count all elements on the page
+    let value = document.querySelectorAll('*').length;
 
     const intervalId = setInterval(async () => {
       if (ctx.isInvalidated) {
