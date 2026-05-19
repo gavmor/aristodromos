@@ -1,0 +1,7 @@
+{
+  "extends": "./.wxt/tsconfig.json",
+  "exclude": [
+    "demo.ts",
+    ".output"
+  ]
+}

@@ -1,0 +1,12 @@
+pre-commit:
+  parallel: true
+  jobs:
+    - name: typecheck
+      run: npx tsc -p .wxt/tsconfig.json --noEmit
+      glob: "*.{ts,tsx}"
+
+    - name: tests
+      run: npx vitest run --reporter=verbose
+
+    - name: lint
+      run: npx jscpd --min-lines 10 --min-tokens 50 --pattern "utils/**/*.ts"
