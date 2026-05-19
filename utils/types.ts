@@ -9,6 +9,8 @@ export interface AXNode {
   role: string;
   name?: string;
   value?: string | boolean;
+  /** How the user can interact with this element, derived from the actual DOM element type */
+  affordance?: 'click' | 'input';
   children?: Record<string, AXNode>;
 }
 

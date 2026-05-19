@@ -1,11 +1,16 @@
-import { callOllama, buildSystemPrompt, buildObservationPrompt, OLLAMA_MODEL } from '../utils/agent';
+import { RandomClickStrategy } from '../utils/random-click-strategy';
+import type { AgentStrategy } from '../utils/strategy';
 import { decideSceneTransition, recordMemory, type LifecycleStatus } from '../utils/bg-handler';
 import type { OperationSchema } from '../utils/types';
+
+// Swap strategy implementations as needed:
+//   new LLMStrategy()     — uses ollama for LLM-driven decisions
+//   new RandomClickStrategy() — picks random clickable elements for testing
+const strategy: AgentStrategy = new RandomClickStrategy();
 
 let lifecycleStatus: LifecycleStatus = 'idle';
 let memories: string[] = [];
 let activeAIController: AbortController | null = null;
-let operationQueue: import('fast-json-patch').Operation[] = [];
 
 function logStatus(s: LifecycleStatus) {
   lifecycleStatus = s;
@@ -14,6 +19,7 @@ function logStatus(s: LifecycleStatus) {
 
 export default defineBackground(() => {
   logStatus('ruminating');
+  console.log(`[Agent] Using strategy: ${strategy.name}`);
   memories = ['Browser automation agent initialized', 'Goal: Explore page and interact with elements'];
 
   // PROCESSOR: handle SCENE_UPDATED from content
@@ -41,59 +47,37 @@ export default defineBackground(() => {
     logStatus('acting');
     activeAIController = new AbortController();
 
-    executeAgentLoop(schema, scene.newInformation, activeAIController.signal)
-      .then((ops) => {
-        if (ops.length > 0) {
+    strategy.decide(schema, scene.newInformation, activeAIController.signal)
+      .then((agentDecision) => {
+        const ops = agentDecision.operations;
+        console.log(`[Agent] ${strategy.name} reasoning:`, agentDecision.reasoning);
+
+        // Check for LLM-signaled completion (/complete path)
+        const hasComplete = ops.some((op) => op.path === '/complete');
+        if (hasComplete) {
+          logStatus('terminated');
+          sendResponse({ status: 'success' });
+          return;
+        }
+
+        const actionable = ops.filter((op) => op.path !== '/complete');
+        if (actionable.length > 0) {
           const tabId = sender.tab?.id;
           if (tabId != null) {
             browser.tabs.sendMessage(tabId, {
-              direction: 'B2C', type: 'EXECUTE_OT', payload: ops,
+              direction: 'B2C', type: 'EXECUTE_OT', payload: actionable,
             }).catch(() => {});
           }
         }
+
+        memories = recordMemory(memories, `Step: ${agentDecision.reasoning}`);
         sendResponse({ status: 'success' });
       })
       .catch((err: Error) => {
+        console.error(`[Agent] ${strategy.name} error:`, err.message);
         sendResponse({ status: err.name === 'AbortError' ? 'canceled' : 'error', error: err.message });
       });
 
     return true; // keep channel open
   });
 });
-
-async function executeAgentLoop(
-  schema: OperationSchema,
-  newInformation: string[],
-  abortSignal: AbortSignal,
-) {
-  const messages = [
-    { role: 'system', content: buildSystemPrompt() },
-    { role: 'user', content: buildObservationPrompt(schema, newInformation) },
-  ];
-
-  if (memories.length > 0) {
-    messages.push({
-      role: 'assistant',
-      content: JSON.stringify({ reasoning: 'I recall previous context.', memories }),
-    });
-  }
-
-  const raw = await callOllama(OLLAMA_MODEL, messages, abortSignal);
-  const parsed = JSON.parse(raw);
-
-  console.log('[Agent] Reasoning:', parsed.reasoning);
-  const ops: import('fast-json-patch').Operation[] = [];
-
-  if (Array.isArray(parsed.operations)) {
-    for (const op of parsed.operations) {
-      if (op.path === '/complete') {
-        logStatus('terminated');
-        continue;
-      }
-      ops.push(op);
-    }
-  }
-
-  memories = recordMemory(memories, `Step: ${parsed.reasoning}`);
-  return ops;
-}

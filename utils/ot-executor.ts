@@ -6,31 +6,42 @@ import type { Operation } from 'fast-json-patch';
 
 /**
  * Resolve a JSON Patch path back to a DOM element.
- * Supports /#id and /tag.classname formats.
+ * First tries the elementMap (synthetic keys like "el-btn-0"),
+ * then falls back to /#id and /tag.classname formats.
  */
-export function resolvePatchPath(path: string): Element | null {
-  if (path.startsWith('/#')) {
-    return document.getElementById(path.slice(2));
-  }
-  // Try matching by tag + class from the first segment
+export function resolvePatchPath(
+  path: string,
+  elementMap?: Map<string, Element>,
+): Element | null {
   const parts = path.split('/').filter(Boolean);
-  if (parts.length > 0) {
-    const seg = parts[0];
-    const tagMatch = seg.match(/^([a-zA-Z0-9-]+)/);
-    if (tagMatch) {
-      const selector = seg.replace(/^[a-zA-Z0-9-]+/, tagMatch[0]);
-      return document.querySelector(selector);
-    }
+  if (parts.length === 0) return null;
+
+  // Try elementMap first — keys like "el-btn-0" from buildAXTree()
+  if (elementMap?.has(parts[0])) return elementMap.get(parts[0])!;
+
+  // Fallback: /#id lookup from "/#btn-1/clicked" → id="btn-1"
+  if (path.startsWith('/#')) {
+    const id = parts[0].slice(1); // "#btn-1" → "btn-1"
+    return document.getElementById(id);
   }
+
+  // Fallback: DOM selector from first path segment
+  const seg = parts[0];
+  const tagMatch = seg.match(/^([a-zA-Z0-9-]+)/);
+  if (tagMatch) {
+    const selector = seg.replace(/^[a-zA-Z0-9-]+/, tagMatch[0]);
+    return document.querySelector(selector);
+  }
+
   return null;
 }
 
 /**
  * Apply a single OT operation to the DOM.
  */
-export function applyOperation(op: Operation): boolean {
+export function applyOperation(op: Operation, elementMap?: Map<string, Element>): boolean {
   try {
-    const el = resolvePatchPath(op.path);
+    const el = resolvePatchPath(op.path, elementMap);
     if (!el) return false;
 
     switch (op.op) {
@@ -62,11 +73,13 @@ export function applyOperation(op: Operation): boolean {
 export async function applyOperationalTransformAsync(
   otPayload: Operation[],
   abortSignal: AbortSignal,
+  elementMap?: Map<string, Element>,
 ): Promise<void> {
+  if (abortSignal.aborted) throw new DOMException('OT application canceled', 'AbortError');
+
   console.log(`[OT] Starting cancelable OT application (${otPayload.length} operations)...`);
 
   for (const patch of otPayload) {
-    if (abortSignal.aborted) throw new DOMException('OT application canceled', 'AbortError');
 
     await new Promise<void>((resolve, reject) => {
       const timeoutId = setTimeout(resolve, 800);
@@ -76,7 +89,7 @@ export async function applyOperationalTransformAsync(
       });
     });
 
-    const ok = applyOperation(patch);
+    const ok = applyOperation(patch, elementMap);
     console.log(`[OT] -> [DOM Execution] ${patch.op} at ${patch.path}: ${ok ? 'OK' : 'FAILED'}`);
   }
 

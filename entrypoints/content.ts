@@ -9,11 +9,18 @@ export default defineContentScript({
   allFrames: false,
   main(ctx) {
     let activeUIController: AbortController | null = null;
+    let elementMap = new Map<string, Element>();
+
+    // Bound executor uses the latest elementMap to resolve synthetic keys
+    const executeWithElementMap = (
+      ops: import('fast-json-patch').Operation[],
+      signal: AbortSignal,
+    ) => applyOperationalTransformAsync(ops, signal, elementMap);
 
     // PROCESSOR: handle EXECUTE_OT from background
     browser.runtime.onMessage.addListener((message: any, _sender, sendResponse) => {
       if (message.direction === 'B2C' && message.type === 'EXECUTE_OT') {
-        executeOT(message.payload, applyOperationalTransformAsync, ctx.signal)
+        executeOT(message.payload, executeWithElementMap, ctx.signal)
           .then(sendResponse);
         return true;
       }
@@ -32,7 +39,8 @@ export default defineContentScript({
         ? AbortSignal.any([activeUIController.signal, ctx.signal])
         : activeUIController.signal;
 
-      const { axNode } = buildAXTree();
+      const { axNode, elementMap: em } = buildAXTree();
+      elementMap = em;
       const { scene, schema } = distillAXTreeToSchema(axNode);
 
       try {
@@ -40,9 +48,7 @@ export default defineContentScript({
           { direction: 'C2B', type: 'SCENE_UPDATED', payload: { scene, schema } },
           combinedSignal,
         );
-        if (response?.status === 'success') {
-          console.log('[Content] Background acknowledged scene update.');
-        }
+        console.log(`[Content] Background response: ${response?.status ?? 'none'}`);
       } catch (err) {
         if (!isAbortError(err)) {
           console.error('[Content] Scene update failed:', err);

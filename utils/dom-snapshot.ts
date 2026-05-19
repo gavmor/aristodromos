@@ -19,12 +19,24 @@ export function buildAXTree(): { axNode: AXNode; elementMap: Map<string, Element
 
     const node: AXNode = { role: el.getAttribute('role') ?? el.tagName.toLowerCase() };
 
+    // Determine affordance from the actual element type, not a role whitelist.
+    // Text-accepting elements → input, everything else interactive → click.
     if (el instanceof HTMLInputElement) {
       node.role = el.type === 'checkbox' ? 'checkbox' : el.type === 'submit' ? 'button' : 'textbox';
       node.value = el.value;
+      node.affordance = ['checkbox', 'radio', 'submit', 'reset', 'button', 'image', 'file'].includes(el.type)
+        ? 'click' : 'input';
     } else if (el instanceof HTMLTextAreaElement) {
       node.role = 'textbox';
       node.value = el.value;
+      node.affordance = 'input';
+    } else {
+      // <a>, <button>, <select>, [tabindex], etc. → click
+      node.affordance = 'click';
+    }
+
+    if (el.tagName.toLowerCase() === 'a' && !el.getAttribute('role')) {
+      node.role = 'link';
     }
 
     const label = el.getAttribute('aria-label')
@@ -55,10 +67,10 @@ export function distillAXTreeToSchema(
 
   for (const [key, node] of Object.entries(axNode.children ?? {})) {
     const basePointer = `/${key}`;
-    if (node.role === 'button' || node.role === 'checkbox') {
-      interactablePaths.push(`${basePointer}/clicked`);
-    } else if (node.role === 'textbox' || node.role === 'input') {
+    if (node.affordance === 'input') {
       interactablePaths.push(`${basePointer}/value`);
+    } else if (node.affordance === 'click') {
+      interactablePaths.push(`${basePointer}/clicked`);
     }
   }
 

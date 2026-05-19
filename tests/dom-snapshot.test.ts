@@ -3,35 +3,37 @@ import { distillAXTreeToSchema } from '../utils/dom-snapshot';
 import type { AXNode } from '../utils/types';
 
 describe('distillAXTreeToSchema', () => {
-  it('produces paths for buttons', () => {
+  it('produces click paths for clickable elements', () => {
     const axNode: AXNode = {
       role: 'WebArea',
       name: 'Test',
       children: {
-        'el-btn-0': { role: 'button', name: 'Submit' },
-        'el-btn-1': { role: 'button', name: 'Cancel' },
+        'el-btn-0': { role: 'button', affordance: 'click', name: 'Submit' },
+        'el-link-1': { role: 'link', affordance: 'click', name: 'Click here' },
       },
     };
 
-    const { scene, schema } = distillAXTreeToSchema(axNode);
+    const { schema } = distillAXTreeToSchema(axNode);
 
     expect(schema.allowedPaths).toContain('/el-btn-0/clicked');
-    expect(schema.allowedPaths).toContain('/el-btn-1/clicked');
+    expect(schema.allowedPaths).toContain('/el-link-1/clicked');
     expect(schema.allowedOperations).toEqual(['replace']);
   });
 
-  it('produces value paths for textboxes', () => {
+  it('produces value paths for input elements', () => {
     const axNode: AXNode = {
       role: 'WebArea',
       name: 'Form',
       children: {
-        'el-input-0': { role: 'textbox', name: 'Username' },
+        'el-input-0': { role: 'textbox', affordance: 'input', name: 'Username' },
+        'el-textarea-1': { role: 'textbox', affordance: 'input', value: '' },
       },
     };
 
-    const { scene, schema } = distillAXTreeToSchema(axNode);
+    const { schema } = distillAXTreeToSchema(axNode);
 
     expect(schema.allowedPaths).toContain('/el-input-0/value');
+    expect(schema.allowedPaths).toContain('/el-textarea-1/value');
     expect(schema.allowedPaths).not.toContain('/el-input-0/clicked');
   });
 
@@ -39,30 +41,32 @@ describe('distillAXTreeToSchema', () => {
     const axNode: AXNode = {
       role: 'WebArea',
       children: {
-        'el-btn-0': { role: 'button' },
-        'el-input-1': { role: 'textbox', value: '' },
-        'el-chk-2': { role: 'checkbox' },
-        'el-span-3': { role: 'text' }, // non-interactive
+        'el-btn-0': { role: 'button', affordance: 'click' },
+        'el-input-1': { role: 'textbox', affordance: 'input', value: '' },
+        'el-chk-2': { role: 'checkbox', affordance: 'click' },
+        'el-link-3': { role: 'link', affordance: 'click', name: 'Click here' },
+        'el-span-4': { role: 'text' }, // no affordance → non-interactive
       },
     };
 
-    const { scene, schema } = distillAXTreeToSchema(axNode);
+    const { schema } = distillAXTreeToSchema(axNode);
 
     expect(schema.allowedPaths).toEqual([
       '/el-btn-0/clicked',
       '/el-input-1/value',
       '/el-chk-2/clicked',
+      '/el-link-3/clicked',
     ]);
-    // el-span-3 is not a button, checkbox, textbox, or input → excluded
-    expect(schema.allowedPaths).not.toContain('/el-span-3/clicked');
-    expect(schema.allowedPaths).not.toContain('/el-span-3/value');
+    // el-span-4 has no affordance → excluded
+    expect(schema.allowedPaths).not.toContain('/el-span-4/clicked');
+    expect(schema.allowedPaths).not.toContain('/el-span-4/value');
   });
 
   it('returns /no-elements when no interactables exist', () => {
     const axNode: AXNode = {
       role: 'WebArea',
       children: {
-        'el-div-0': { role: 'text' },
+        'el-div-0': { role: 'text' }, // no affordance → excluded
       },
     };
 
@@ -82,7 +86,7 @@ describe('distillAXTreeToSchema', () => {
   it('populates metadata Map with timestamp and count', () => {
     const axNode: AXNode = {
       role: 'WebArea',
-      children: { 'el-btn-0': { role: 'button' } },
+      children: { 'el-btn-0': { role: 'button', affordance: 'click' } },
     };
 
     const { scene } = distillAXTreeToSchema(axNode);
@@ -94,7 +98,7 @@ describe('distillAXTreeToSchema', () => {
   it('preserves affordances as the children record', () => {
     const axNode: AXNode = {
       role: 'WebArea',
-      children: { 'el-btn-0': { role: 'button', name: 'Go' } },
+      children: { 'el-btn-0': { role: 'button', affordance: 'click', name: 'Go' } },
     };
 
     const { scene } = distillAXTreeToSchema(axNode);

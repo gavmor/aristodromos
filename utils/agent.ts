@@ -1,4 +1,6 @@
+import type { Operation } from 'fast-json-patch';
 import type { OperationSchema } from './types';
+import type { AgentStrategy, AgentDecision } from './strategy';
 
 /** System prompt for the Qwen agent */
 export function buildSystemPrompt(): string {
@@ -68,3 +70,40 @@ export async function callOllama(
 }
 
 export const OLLAMA_MODEL = 'qwen3.6:27b';
+
+/**
+ * Strategy that uses an LLM (ollama) to decide actions on the page.
+ * Wraps the existing callOllama-based logic from this module.
+ */
+export class LLMStrategy implements AgentStrategy {
+  readonly name = 'llm-ollama';
+
+  constructor(private model: string = OLLAMA_MODEL) {}
+
+  async decide(
+    schema: OperationSchema,
+    newInformation: string[],
+    abortSignal: AbortSignal,
+  ): Promise<AgentDecision> {
+    const messages: Array<{ role: string; content: string }> = [
+      { role: 'system', content: buildSystemPrompt() },
+      { role: 'user', content: buildObservationPrompt(schema, newInformation) },
+    ];
+
+    const raw = await callOllama(this.model, messages, abortSignal);
+    const parsed = JSON.parse(raw);
+
+    const operations: Operation[] = [];
+    if (Array.isArray(parsed.operations)) {
+      for (const op of parsed.operations) {
+        if (op.path === '/complete') continue;
+        operations.push(op);
+      }
+    }
+
+    return {
+      operations,
+      reasoning: parsed.reasoning ?? '',
+    };
+  }
+}
