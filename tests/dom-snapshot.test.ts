@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { distillAXTreeToSchema } from '../utils/dom-snapshot';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { buildAXTree, distillAXTreeToSchema } from '../utils/dom-snapshot';
 import type { AXNode } from '../utils/types';
 
 describe('distillAXTreeToSchema', () => {
@@ -105,5 +105,64 @@ describe('distillAXTreeToSchema', () => {
 
     expect(scene.affordances).toEqual(axNode.children);
     expect((scene.affordances['el-btn-0'] as any).name).toBe('Go');
+  });
+});
+
+describe('buildAXTree', () => {
+  let container: HTMLDivElement;
+
+  /** Count how many allowedPaths start with a given element key prefix */
+  function countPaths(paths: string[], prefix: string): number {
+    return paths.filter((p) => p.startsWith(`/${prefix}`)).length;
+  }
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    container.innerHTML = `
+      <a href="#" id="el-link">standard link</a>
+      <a onclick="return false" id="el-jslink">js link</a>
+      <button id="el-btn">button</button>
+      <input type="text" id="el-input">
+      <textarea id="el-textarea"></textarea>
+      <select id="el-select"><option>1</option></select>
+      <div role="button" tabindex="0" id="el-aria-btn">ARIA button</div>
+      <span onclick="alert(1)" id="el-clickable-span">clickable span</span>
+      <div tabindex="0" id="el-focusable-div">focusable div</div>
+      <div contenteditable="true" id="el-contenteditable">editable</div>
+    `;
+    document.body.appendChild(container);
+  });
+
+  afterEach(() => {
+    container?.remove();
+  });
+
+  it('detects all interactive element types including links', () => {
+    const { axNode, elementMap } = buildAXTree();
+    const { schema } = distillAXTreeToSchema(axNode);
+
+    const pathSet = new Set(schema.allowedPaths);
+
+    // <a> links
+    expect(pathSet).toContain('/el-a-0/clicked');
+    expect(pathSet).toContain('/el-a-1/clicked');
+
+    // Tag-based elements produce correct paths
+    expect(schema.allowedPaths.some((p) => p.startsWith('/el-button-') && p.endsWith('/clicked'))).toBe(true);
+    expect(schema.allowedPaths.some((p) => p.startsWith('/el-input-') && p.endsWith('/value'))).toBe(true);
+    expect(schema.allowedPaths.some((p) => p.startsWith('/el-textarea-') && p.endsWith('/value'))).toBe(true);
+    expect(schema.allowedPaths.some((p) => p.startsWith('/el-select-') && p.endsWith('/clicked'))).toBe(true);
+
+    // ARIA role / tabindex elements
+    expect(schema.allowedPaths.some((p) => p.startsWith('/el-div-') && p.endsWith('/clicked'))).toBe(true);
+
+    // Elements querySelectorAll previously MISSED:
+    // <span onclick="..."> — no native tag, no tabindex
+    expect(schema.allowedPaths.some((p) => p.startsWith('/el-span-') && p.endsWith('/clicked'))).toBe(true);
+    // <div contenteditable="true"> — not previously detected, is input affordance
+    expect(schema.allowedPaths.some((p) => p.startsWith('/el-div-') && p.endsWith('/value'))).toBe(true);
+
+    // elementMap has entries for all 10 interactive elements
+    expect(elementMap.size).toBe(10);
   });
 });

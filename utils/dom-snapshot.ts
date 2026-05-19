@@ -4,39 +4,121 @@ import type { AXNode, PageState, OperationSchema } from './types';
 // Build AX tree from live DOM — mirrors demo.ts ContentScript.fetchRealSceneContext
 // ---------------------------------------------------------------------------
 
+/** ARIA roles that make an element interactive / clickable */
+const INTERACTIVE_ROLES = new Set([
+  'button', 'link', 'checkbox', 'radio', 'tab', 'menuitem',
+  'option', 'switch', 'slider', 'combobox', 'searchbox',
+]);
+
+/** Native interactive HTML tag names */
+const INTERACTIVE_TAGS = new Set([
+  'a', 'button', 'input', 'select', 'textarea', 'details', 'summary',
+]);
+
+const TEXT_INPUT_TYPES = new Set([
+  'text', 'email', 'password', 'search', 'tel', 'url', 'number',
+  'date', 'time', 'datetime-local', 'month', 'week', 'color',
+]);
+
+const CLICK_INPUT_TYPES = new Set([
+  'checkbox', 'radio', 'submit', 'reset', 'button', 'image', 'file',
+]);
+
+/** Check whether an element should be considered interactive */
+function isInteractive(el: Element): boolean {
+  const tag = el.tagName.toLowerCase();
+
+  // Native interactive tags
+  if (INTERACTIVE_TAGS.has(tag)) return true;
+
+  // ARIA role implies interactivity
+  const role = el.getAttribute('role');
+  if (role && INTERACTIVE_ROLES.has(role)) return true;
+
+  // tabindex (not -1) means focusable → interactive
+  const ti = el.getAttribute('tabindex');
+  if (ti !== null && ti !== '-1') return true;
+
+  // contenteditable makes an element editable → interactive
+  const ce = el.getAttribute('contenteditable');
+  if (ce === 'true' || ce === '') return true;
+
+  // Inline event handlers imply interactivity
+  if (el.hasAttribute('onclick') ||
+      el.hasAttribute('onmousedown') ||
+      el.hasAttribute('onkeydown')) return true;
+
+  return false;
+}
+
+/** Compute the ARIA role for an interactive element */
+function computeRole(el: Element): string {
+  const explicit = el.getAttribute('role');
+  if (explicit) return explicit;
+
+  const tag = el.tagName.toLowerCase();
+
+  if (tag === 'a') return 'link';
+  if (tag === 'button') return 'button';
+  if (tag === 'select') return 'combobox';
+  if (tag === 'details') return 'group';
+  if (tag === 'summary') return 'button';
+
+  if (tag === 'input') {
+    const input = el as HTMLInputElement;
+    if (input.type === 'checkbox') return 'checkbox';
+    if (input.type === 'radio') return 'radio';
+    if (input.type === 'submit' || input.type === 'reset' || input.type === 'button' || input.type === 'image') {
+      return 'button';
+    }
+    if (TEXT_INPUT_TYPES.has(input.type)) return 'textbox';
+    return 'textbox';
+  }
+
+  if (tag === 'textarea') return 'textbox';
+
+  return tag;
+}
+
+/** Index counter per tag for generating unique keys */
+function keyIndex(el: Element, counts: Map<string, number>): string {
+  const tag = el.tagName.toLowerCase();
+  const i = counts.get(tag) ?? 0;
+  counts.set(tag, i + 1);
+  return `el-${tag}-${i}`;
+}
+
 export function buildAXTree(): { axNode: AXNode; elementMap: Map<string, Element> } {
   const elementMap = new Map<string, Element>();
+  const children: Record<string, AXNode> = {};
+  const counts = new Map<string, number>();
 
-  const interactives = document.querySelectorAll<HTMLElement>(
-    'button, a, input, textarea, select, [tabindex]:not([tabindex="-1"])',
+  const walker = document.createTreeWalker(
+    document.body,
+    NodeFilter.SHOW_ELEMENT,
+    null,
   );
 
-  const children: Record<string, AXNode> = {};
+  let el: Element | null;
+  while ((el = walker.nextNode() as Element | null)) {
+    if (!isInteractive(el)) continue;
 
-  interactives.forEach((el, i) => {
-    const key = `el-${el.tagName.toLowerCase()}-${i}`;
+    const key = keyIndex(el, counts);
     elementMap.set(key, el);
+    const role = computeRole(el);
 
-    const node: AXNode = { role: el.getAttribute('role') ?? el.tagName.toLowerCase() };
+    const node: AXNode = { role };
 
-    // Determine affordance from the actual element type, not a role whitelist.
-    // Text-accepting elements → input, everything else interactive → click.
     if (el instanceof HTMLInputElement) {
-      node.role = el.type === 'checkbox' ? 'checkbox' : el.type === 'submit' ? 'button' : 'textbox';
       node.value = el.value;
-      node.affordance = ['checkbox', 'radio', 'submit', 'reset', 'button', 'image', 'file'].includes(el.type)
-        ? 'click' : 'input';
+      node.affordance = CLICK_INPUT_TYPES.has(el.type) ? 'click' : 'input';
     } else if (el instanceof HTMLTextAreaElement) {
-      node.role = 'textbox';
       node.value = el.value;
       node.affordance = 'input';
+    } else if (el.getAttribute('contenteditable') === 'true' || el.getAttribute('contenteditable') === '') {
+      node.affordance = 'input';
     } else {
-      // <a>, <button>, <select>, [tabindex], etc. → click
       node.affordance = 'click';
-    }
-
-    if (el.tagName.toLowerCase() === 'a' && !el.getAttribute('role')) {
-      node.role = 'link';
     }
 
     const label = el.getAttribute('aria-label')
@@ -46,7 +128,7 @@ export function buildAXTree(): { axNode: AXNode; elementMap: Map<string, Element
     if (label) node.name = label;
 
     children[key] = node;
-  });
+  }
 
   return {
     axNode: { role: 'WebArea', name: document.title, children },
