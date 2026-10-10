@@ -5,7 +5,7 @@
 // is already watching, so re-perception is automatic and the loop closes through
 // the page rather than through a reply message.
 import { SceneProjector } from '../utils/scene-projector';
-import { applyPlan, summarize } from '../utils/reconciler';
+import { applyPlan, didMove, summarize } from '../utils/reconciler';
 import { AGENT_PORT, type DownMessage } from '../utils/wire';
 
 export default defineContentScript({
@@ -49,7 +49,16 @@ export default defineContentScript({
         resolve: (id) => active.elementFor(id),
         nodeOf: (id) => active.nodeOf(id),
       });
-      console.log(`[agent] tick ${message.tick} ${JSON.stringify(message.reasoning)} -> ${summarize(results)}`);
+      console.log(`[agent] tick ${message.tick} remaining=${JSON.stringify(message.remaining)} -> ${summarize(results)}`);
+
+      // The plan changed nothing, so the projector has nothing to report, so the
+      // background would hear silence and conclude we are finished. We are not —
+      // it stalled. Re-offer the same Scene and let it decide again; the tick
+      // budget bounds how long it may keep stalling.
+      if (!didMove(results)) {
+        console.log(`[agent] tick ${message.tick} moved nothing — re-offering the scene`);
+        port.postMessage(active.snapshot());
+      }
     });
 
     // SPA navigation is a new world: new documentId, new snapshot, fresh mirror.

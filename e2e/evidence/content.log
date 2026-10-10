@@ -1,0 +1,2 @@
+[agent] tick 1 remaining="Email address, Password, Remember this device" -> setState(n5)=applied setState(n6)=applied setState(n7)=applied
+[agent] tick 2 remaining="Nothing remains. All fields are correctly set according to the goal." -> clickTrigger(n8)=applied

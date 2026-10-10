@@ -90,10 +90,11 @@ function harness(decisions: Decision[], overrides = {}): Harness {
 
 const act = (nodeId: string, value: string): Decision => ({
   decided: true,
-  reasoning: 'fill it',
+  satisfied: 'nothing yet',
+  remaining: 'fill it',
   actions: [{ kind: 'setState', nodeId, value }],
 });
-const done: Decision = { decided: true, reasoning: 'nothing left', actions: [] };
+const done: Decision = { decided: true, satisfied: 'all of it', remaining: 'nothing', actions: [] };
 
 describe('AgentLoop', () => {
   it('waits for the scene to settle, then decides exactly once', async () => {
@@ -109,7 +110,7 @@ describe('AgentLoop', () => {
     await vi.advanceTimersByTimeAsync(10);
     expect(decide).toHaveBeenCalledTimes(1);
     expect(sent).toEqual([
-      { kind: 'plan', documentId: 'd1', tick: 1, reasoning: 'fill it', actions: [{ kind: 'setState', nodeId: 'email', value: 'a@b.c' }] },
+      { kind: 'plan', documentId: 'd1', tick: 1, satisfied: 'nothing yet', remaining: 'fill it', actions: [{ kind: 'setState', nodeId: 'email', value: 'a@b.c' }] },
     ]);
     vi.useRealTimers();
   });

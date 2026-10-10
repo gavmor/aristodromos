@@ -26,8 +26,17 @@ export type PlanAction =
   | { kind: 'clickTrigger'; nodeId: string };
 
 export interface Plan {
-  /** short rationale, decoded BEFORE the actions so it can actually inform them */
-  reasoning: string;
+  /**
+   * What the CURRENT control values already satisfy. Decoded FIRST, on purpose:
+   * in a memoryless loop the only record of past actions is the page itself, so
+   * the model must be made to read the page before it is allowed to emit a verb.
+   * A free `reasoning` field here instead invites a restatement of the goal —
+   * observed: the model narrated "I need to fill in the email and password" at a
+   * tick where both were already filled, and dutifully re-filled them.
+   */
+  satisfied: string;
+  /** what the goal still needs, judged as the difference from `satisfied` */
+  remaining: string;
   /** empty = nothing left to do for the goal on this Scene */
   actions: PlanAction[];
 }
@@ -150,7 +159,8 @@ export function buildActionSchema(scene: Scene): ActionSchema | null {
 
   return {
     schema: z.object({
-      reasoning: z.string(),
+      satisfied: z.string(),
+      remaining: z.string(),
       actions: z.array(action),
     }),
     stateIds: stateNodes.map((n) => n.id),

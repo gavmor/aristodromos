@@ -299,9 +299,29 @@ function buildStructureNode(el: Element, base: NodeBase, role: string): Structur
   return prune(node);
 }
 
+/**
+ * Inputs the HTML-AAM gives "no corresponding role", which `getRole` honestly
+ * reports as null — and which `parseNode` would then drop entirely. A password
+ * field vanishing from a model whose entire claim is fidelity is not an
+ * acceptable omission, and browsers do expose these in the AX tree. So the
+ * exception is named here rather than left as a silent blind spot. All of them
+ * are text-shaped state: a settable string value.
+ */
+const ROLELESS_TEXT_INPUTS = new Set([
+  'password', 'date', 'datetime-local', 'month', 'week', 'time', 'color',
+]);
+
+export function resolveRole(el: Element): string | null {
+  const role = getRole(el);
+  if (role) return role;
+  if (el.tagName.toLowerCase() !== 'input') return null;
+  const type = (el.getAttribute('type') ?? '').toLowerCase();
+  return ROLELESS_TEXT_INPUTS.has(type) ? 'textbox' : null;
+}
+
 /** Project a single DOM element into its SceneNode, or null if not salient. */
 export function parseNode(el: Element, ctx: ParseContext): SceneNode | null {
-  const role = getRole(el);
+  const role = resolveRole(el);
   if (!role || NON_SALIENT_ROLES.has(role)) return null;
   const name = computeAccessibleName(el) || undefined;
   const id = ctx.mirror.idFor(el, semanticSignature(role, name, structuralPath(el)));

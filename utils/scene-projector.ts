@@ -171,6 +171,23 @@ export class SceneProjector {
 
     const view = doc.defaultView;
     if (view) {
+      // A control's value is an IDL property, not an attribute: writing it fires
+      // NO mutation record, so MutationObserver alone leaves every `value` in
+      // the Scene frozen at its initial state. For a model whose only memory is
+      // the page, that is fatal — it re-fills fields it already filled, forever.
+      // These two events are the missing source of truth for state nodes.
+      const onValueChange = (event: Event): void => {
+        if (event.target instanceof Element) this.markDirty(event.target);
+      };
+      for (const type of ['input', 'change']) {
+        view.addEventListener(type, onValueChange, true);
+      }
+      this.teardown.push(() => {
+        for (const type of ['input', 'change']) {
+          view.removeEventListener(type, onValueChange, true);
+        }
+      });
+
       const onFocus = (): void => {
         const active = doc.activeElement;
         if (this.lastFocused && this.lastFocused !== active) this.markDirty(this.lastFocused);

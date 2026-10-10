@@ -1,0 +1,23 @@
+[agent] tick 1 remaining="{\n  " -> setState(n5)=applied setState(n6)=noop setState(n7)=noop
+[agent] tick 2 remaining="Sign in as alice@example.com" -> setState(n5)=noop setState(n6)=noop setState(n7)=noop
+[agent] tick 2 moved nothing — re-offering the scene
+[agent] tick 3 remaining="none" -> setState(n5)=noop setState(n6)=noop setState(n7)=noop
+[agent] tick 3 moved nothing — re-offering the scene
+[agent] tick 4 remaining="Email address" -> setState(n5)=noop
+[agent] tick 4 moved nothing — re-offering the scene
+[agent] tick 5 remaining="" -> setState(n5)=noop setState(n6)=noop setState(n7)=noop setState(n6)=noop
+[agent] tick 5 moved nothing — re-offering the scene
+[agent] tick 6 remaining="Email address" -> setState(n5)=noop setState(n6)=noop setState(n7)=noop
+[agent] tick 6 moved nothing — re-offering the scene
+[agent] tick 7 remaining="Enter your email and password to continue." -> setState(n5)=noop setState(n6)=noop setState(n7)=noop
+[agent] tick 7 moved nothing — re-offering the scene
+[agent] tick 8 remaining="0" -> setState(n5)=noop setState(n6)=noop setState(n7)=applied
+[agent] tick 9 remaining="Password" -> setState(n6)=noop setState(n5)=noop setState(n7)=noop
+[agent] tick 9 moved nothing — re-offering the scene
+[agent] tick 10 remaining="Sign in as abc@example.com, sign in as alice@example.com with the password hunter2" -> setState(n5)=noop setState(n6)=noop setState(n7)=noop
+[agent] tick 10 moved nothing — re-offering the scene
+[agent] tick 11 remaining="Sign in as alice@example.com" -> setState(n5)=noop setState(n6)=noop setState(n7)=noop
+[agent] tick 11 moved nothing — re-offering the scene
+[agent] tick 12 remaining="Sign in as alice@example.com with the password hunter2, and remember this device." -> setState(n5)=noop setState(n6)=noop setState(n7)=noop
+[agent] tick 12 moved nothing — re-offering the scene
+[agent] tick 12 idle: tick budget exhausted

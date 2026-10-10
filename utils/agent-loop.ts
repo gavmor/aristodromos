@@ -107,7 +107,7 @@ export class AgentLoop {
       decision = await this.deps.decide(scene, controller.signal);
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
-      decision = { decided: false, reasoning: '', actions: [] };
+      decision = { decided: false, satisfied: '', remaining: '', actions: [] };
     } finally {
       this.inFlight = undefined;
     }
@@ -119,7 +119,8 @@ export class AgentLoop {
       url: scene.url,
       opsSinceLastTurn: ops,
       afforded: { state: afforded?.stateIds ?? [], trigger: afforded?.triggerIds ?? [] },
-      reasoning: decision.reasoning,
+      satisfied: decision.satisfied,
+      remaining: decision.remaining,
       actions: decision.actions,
       ms: (this.deps.now ?? Date.now)() - started,
       error,
@@ -130,7 +131,8 @@ export class AgentLoop {
         kind: 'plan',
         documentId: scene.documentId,
         tick,
-        reasoning: decision.reasoning,
+        satisfied: decision.satisfied,
+        remaining: decision.remaining,
         actions: decision.actions,
       });
       return;
@@ -140,7 +142,7 @@ export class AgentLoop {
       kind: 'idle',
       documentId: scene.documentId,
       tick,
-      reason: error ?? (decision.decided ? 'goal satisfied by the current scene' : 'nothing afforded'),
+      reason: error ?? (decision.decided ? decision.remaining || 'goal satisfied by the current scene' : 'nothing afforded'),
     });
   }
 }

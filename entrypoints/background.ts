@@ -55,7 +55,7 @@ export default defineBackground(() => {
     const loop = new AgentLoop({
       decide: async (scene, signal) => {
         const config = await readConfig();
-        if (!config.goal) return { decided: false, reasoning: '', actions: [] };
+        if (!config.goal) return { decided: false, satisfied: '', remaining: 'no goal configured', actions: [] };
         const ollama = createOllama({ baseURL: config.baseURL });
         return decide({ scene, goal: config.goal, model: ollama.chat(config.model), signal });
       },

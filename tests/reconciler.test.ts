@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { applyPlan, summarize } from '../utils/reconciler';
+import { applyPlan, didMove, summarize } from '../utils/reconciler';
 import { SceneProjector } from '../utils/scene-projector';
 import type { PlanAction } from '../utils/action-schema';
 
@@ -118,5 +118,29 @@ describe('reconciler', () => {
     const results = applyPlan([{ kind: 'clickTrigger', nodeId: idOf('button') }], depsFor(projector));
     expect(results[0].status).toBe('rejected');
     expect(clicked).toBe(0);
+  });
+
+  describe('didMove', () => {
+    it('separates a stalled turn from a finished one', () => {
+      const { projector, idOf } = mount('<input aria-label="Email" value="alice@example.com" />');
+      const id = idOf('input');
+
+      // nothing emitted: genuinely finished
+      expect(didMove(applyPlan([], depsFor(projector)))).toBe(false);
+
+      // emitted, but every action was already satisfied: STALLED, not finished
+      expect(didMove(applyPlan([{ kind: 'setState', nodeId: id, value: 'alice@example.com' }], depsFor(projector)))).toBe(false);
+
+      // one real change is enough to count as progress
+      expect(didMove(applyPlan([{ kind: 'setState', nodeId: id, value: 'bob@example.com' }], depsFor(projector)))).toBe(true);
+    });
+
+    it('treats a stale or rejected action as no movement', () => {
+      const { projector, idOf } = mount('<button type="button" disabled>Go</button><input aria-label="E" />');
+      const gone = idOf('input');
+      document.querySelector('input')!.remove();
+      expect(didMove(applyPlan([{ kind: 'clickTrigger', nodeId: idOf('button') }], depsFor(projector)))).toBe(false);
+      expect(didMove(applyPlan([{ kind: 'setState', nodeId: gone, value: 'x' }], depsFor(projector)))).toBe(false);
+    });
   });
 });

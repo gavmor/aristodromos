@@ -55,8 +55,8 @@ describe('buildActionSchema', () => {
     const built = buildActionSchema(sceneOf(stateNode({ id: 'email' })));
     expect(built).not.toBeNull();
     const action = built!.schema;
-    expect(action.safeParse({ reasoning: 'x', actions: [{ kind: 'setState', nodeId: 'email', value: 'a@b.c' }] }).success).toBe(true);
-    expect(action.safeParse({ reasoning: 'x', actions: [{ kind: 'setState', nodeId: 'email' }] }).success).toBe(false);
+    expect(action.safeParse({ satisfied: '', remaining: 'x', actions: [{ kind: 'setState', nodeId: 'email', value: 'a@b.c' }] }).success).toBe(true);
+    expect(action.safeParse({ satisfied: '', remaining: 'x', actions: [{ kind: 'setState', nodeId: 'email' }] }).success).toBe(false);
   });
 
   it('makes clickTrigger-with-a-value unrepresentable', () => {
@@ -74,8 +74,8 @@ describe('buildActionSchema', () => {
     expect(trigger.additionalProperties).toBe(false);
 
     // ...and the two id enums are disjoint, so neither verb reaches the other's nodes.
-    expect(built.schema.safeParse({ reasoning: 'x', actions: [{ kind: 'clickTrigger', nodeId: 'email' }] }).success).toBe(false);
-    expect(built.schema.safeParse({ reasoning: 'x', actions: [{ kind: 'setState', nodeId: 'submit', value: 'x' }] }).success).toBe(false);
+    expect(built.schema.safeParse({ satisfied: '', remaining: 'x', actions: [{ kind: 'clickTrigger', nodeId: 'email' }] }).success).toBe(false);
+    expect(built.schema.safeParse({ satisfied: '', remaining: 'x', actions: [{ kind: 'setState', nodeId: 'submit', value: 'x' }] }).success).toBe(false);
   });
 
   it('drops disabled and modal-inert nodes from the enums', () => {
@@ -90,7 +90,7 @@ describe('buildActionSchema', () => {
     )!;
     expect(built.stateIds).toEqual(['live']);
     expect(built.triggerIds).toEqual(['go']);
-    expect(built.schema.safeParse({ reasoning: '', actions: [{ kind: 'clickTrigger', nodeId: 'greyed' }] }).success).toBe(false);
+    expect(built.schema.safeParse({ satisfied: '', remaining: '', actions: [{ kind: 'clickTrigger', nodeId: 'greyed' }] }).success).toBe(false);
   });
 
   it('drops read-only state nodes', () => {
@@ -111,7 +111,7 @@ describe('buildActionSchema', () => {
         stateNode({ id: 'volume', control: 'range', value: 3, min: 0, max: 10 }),
       ),
     )!;
-    const ok = (action: unknown) => built.schema.safeParse({ reasoning: '', actions: [action] }).success;
+    const ok = (action: unknown) => built.schema.safeParse({ satisfied: '', remaining: '', actions: [action] }).success;
 
     expect(ok({ kind: 'setState', nodeId: 'remember', value: true })).toBe(true);
     expect(ok({ kind: 'setState', nodeId: 'remember', value: 'true' })).toBe(false);

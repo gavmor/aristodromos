@@ -133,3 +133,21 @@ export function summarize(results: ApplyResult[]): string {
   if (results.length === 0) return 'no actions';
   return results.map((r) => `${r.kind}(${r.nodeId})=${r.status}`).join(' ');
 }
+
+/**
+ * Did this plan actually move the world?
+ *
+ * The loop's termination rule is "the page stopped changing, so we are done",
+ * which quietly conflates two different facts: the brain emitted NOTHING
+ * (genuinely finished), and the brain emitted actions that every one of them
+ * no-op'd (stalled — it re-set fields that were already correct). Both produce
+ * silence on the up-edge, and only the first means done.
+ *
+ * Telling them apart needs no memory, no ack and no watermark: the content
+ * script has the answer in its hand the moment it applies the plan. A caller
+ * that gets `false` here should re-offer the current Scene — which is precisely
+ * what at-least-once delivery is for.
+ */
+export function didMove(results: ApplyResult[]): boolean {
+  return results.some((r) => r.status === 'applied');
+}

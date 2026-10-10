@@ -19,7 +19,7 @@ export type UpMessage = ScenePatch;
 
 /** background -> content */
 export type DownMessage =
-  | { kind: 'plan'; documentId: string; tick: number; reasoning: string; actions: PlanAction[] }
+  | { kind: 'plan'; documentId: string; tick: number; satisfied: string; remaining: string; actions: PlanAction[] }
   | { kind: 'idle'; documentId: string; tick: number; reason: string };
 
 /** One row of the run evidence log: what the brain saw and what it emitted. */
@@ -32,7 +32,8 @@ export interface TurnRecord {
   opsSinceLastTurn: number;
   /** node ids the schema admitted this turn */
   afforded: { state: string[]; trigger: string[] };
-  reasoning: string;
+  satisfied: string;
+  remaining: string;
   actions: PlanAction[];
   ms: number;
   error?: string;

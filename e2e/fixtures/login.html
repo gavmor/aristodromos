@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Acme — Sign in</title>
+    <style>
+      body { font: 16px/1.5 system-ui, sans-serif; margin: 3rem auto; max-width: 28rem; }
+      label { display: block; margin-top: 1rem; font-weight: 600; }
+      input[type='text'], input[type='email'], input[type='password'] { width: 100%; padding: .5rem; font-size: 1rem; }
+      button { margin-top: 1.5rem; padding: .6rem 1.2rem; font-size: 1rem; }
+      button[disabled] { opacity: .5; cursor: not-allowed; }
+      #status { margin-top: 1.5rem; padding: .75rem; background: #f3f4f6; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Sign in to Acme</h1>
+
+      <!--
+        The submit button starts DISABLED and is enabled only once both fields
+        hold plausible values. That is the point of the fixture: at the first
+        observation the agent literally cannot name the trigger, because
+        disabled nodes are dropped from the schema's enum. It has to change the
+        world first, re-perceive, and only then can it commit. The multi-step
+        sequence is forced by the page, not by prompt instructions.
+      -->
+      <form id="login" novalidate>
+        <label for="email">Email address</label>
+        <input id="email" name="email" type="email" autocomplete="off" />
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="off" />
+
+        <label for="remember">Remember this device</label>
+        <input id="remember" name="remember" type="checkbox" />
+
+        <button id="submit" type="submit" disabled>Sign in</button>
+      </form>
+
+      <p role="status" id="status">Enter your email and password to continue.</p>
+    </main>
+
+    <script>
+      const form = document.getElementById('login');
+      const email = document.getElementById('email');
+      const password = document.getElementById('password');
+      const remember = document.getElementById('remember');
+      const submit = document.getElementById('submit');
+      const status = document.getElementById('status');
+
+      function sync() {
+        submit.disabled = !(email.value.includes('@') && password.value.length >= 4);
+        status.textContent = submit.disabled
+          ? 'Enter your email and password to continue.'
+          : 'Ready to sign in.';
+      }
+      email.addEventListener('input', sync);
+      password.addEventListener('input', sync);
+
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        form.remove();
+        document.title = 'Acme — Signed in';
+        status.textContent =
+          'Signed in as ' + email.value + '.' +
+          (remember.checked ? ' This device will be remembered.' : '');
+        // The run harness reads this, so success is observed from the PAGE, not
+        // inferred from what the agent said it did.
+        window.__signedInAs = email.value;
+        window.__rememberDevice = remember.checked;
+      });
+    </script>
+  </body>
+</html>

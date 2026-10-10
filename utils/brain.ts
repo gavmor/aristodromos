@@ -26,7 +26,8 @@ export interface Decision extends Plan {
 
 const NOTHING_AFFORDED: Decision = {
   decided: false,
-  reasoning: 'scene affords no reachable control or trigger',
+  satisfied: '',
+  remaining: '',
   actions: [],
 };
 
@@ -79,17 +80,22 @@ export function describeScene(scene: Scene): string {
 }
 
 const SYSTEM = [
-  'You drive a web page by emitting actions over a fixed schema.',
-  'You are MEMORYLESS: decide only from the observation in this message, which',
-  'always reflects the CURRENT page. Actions you already performed are visible as',
-  'the current values of the controls — if a control already holds the value the',
-  'goal wants, do not set it again.',
-  'Emit the actions that make progress NOW, in order. Anything the schema refuses',
-  'to express is not available to you this turn; a trigger you cannot name is',
-  'disabled, so set the fields it depends on instead and it will become',
-  'available on the next observation.',
-  'When the goal is already satisfied by the page as shown, emit an empty action list.',
-].join(' ');
+  'You drive a web page. Fill in the three fields of the schema, in order.',
+  '',
+  'satisfied: read the CURRENT values in the observation and say which parts of',
+  'the goal they already meet. A control that already holds the value the goal',
+  'wants is DONE — you set it on an earlier turn. You have no memory; the page is',
+  'your memory.',
+  '',
+  'remaining: the goal minus satisfied. If nothing remains, say so.',
+  '',
+  'actions: only what "remaining" calls for. Never re-set a control that is',
+  'already correct. When every field is correct, the only thing left is to click',
+  'the trigger that commits the goal — do that. If the committing trigger is not',
+  'offered to you, it is disabled; set the fields it depends on instead and it',
+  'will be offered on the next observation. If nothing remains at all, emit an',
+  'empty action list.',
+].join('\n');
 
 /**
  * One memoryless decision over one Scene.
@@ -122,5 +128,10 @@ export async function decide(options: {
   const legal = new Set([...built.stateIds, ...built.triggerIds]);
   const actions = (object.actions ?? []).filter((a: PlanAction) => legal.has(a.nodeId));
 
-  return { decided: true, reasoning: object.reasoning ?? '', actions };
+  return {
+    decided: true,
+    satisfied: object.satisfied ?? '',
+    remaining: object.remaining ?? '',
+    actions,
+  };
 }
