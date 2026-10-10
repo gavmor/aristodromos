@@ -34,8 +34,11 @@
     "wxt": "^0.20.26"
   },
   "dependencies": {
+    "ai": "^7.0.137",
     "aria-query": "^5.3.2",
     "dom-accessibility-api": "^0.7.1",
-    "fast-json-patch": "^3.1.1"
+    "fast-json-patch": "^3.1.1",
+    "ollama-ai-provider-v2": "^4.0.1",
+    "zod": "^4.6.5"
   }
 }
