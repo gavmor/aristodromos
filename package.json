@@ -12,7 +12,9 @@
     "test:watch": "vitest",
     "e2e": "wxt build && node e2e/run.ts",
     "typecheck": "tsc -p tsconfig.typecheck.json --noEmit",
-    "cpd": "jscpd --min-lines 10 --min-tokens 50 --pattern 'utils/**/*.ts'"
+    "cpd": "jscpd --min-lines 10 --min-tokens 50 --pattern 'utils/**/*.ts'",
+    "eval:gate": "PROMPTFOO_DISABLE_TELEMETRY=1 promptfoo eval -c evals/promptfoo/promptfooconfig.yaml --filter-providers deterministic --no-cache",
+    "eval:bakeoff": "PROMPTFOO_DISABLE_TELEMETRY=1 promptfoo eval -c evals/promptfoo/promptfooconfig.yaml --no-cache"
   },
   "keywords": [],
   "author": "",
@@ -32,6 +34,7 @@
     "jsdom": "^29.1.1",
     "lefthook": "^2.1.6",
     "playwright-core": "^1.57.0",
+    "promptfoo": "0.124.1",
     "vitest": "^4.1.6",
     "wxt": "^0.20.26"
   },
