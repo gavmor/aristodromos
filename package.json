@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.typecheck.json --noEmit",
-    "cpd": "jscpd --min-lines 10 --min-tokens 50 --pattern 'utils/**/*.ts'"
+    "cpd": "jscpd --min-lines 10 --min-tokens 50 --pattern 'utils/**/*.ts'",
+    "spike:kaibanjs": "jiti spikes/kaibanjs/run.ts"
   },
   "keywords": [],
   "author": "",
@@ -34,8 +35,12 @@
     "wxt": "^0.20.26"
   },
   "dependencies": {
+    "@langchain/core": "0.3.80",
+    "@langchain/ollama": "0.2.4",
     "aria-query": "^5.3.2",
     "dom-accessibility-api": "^0.7.1",
-    "fast-json-patch": "^3.1.1"
+    "fast-json-patch": "^3.1.1",
+    "kaibanjs": "0.24.2",
+    "zod": "^3.25.76"
   }
 }

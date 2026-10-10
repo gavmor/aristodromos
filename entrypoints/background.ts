@@ -2,6 +2,11 @@ import { RandomClickStrategy } from '../utils/random-click-strategy';
 import type { AgentStrategy } from '../utils/strategy';
 import { decideSceneTransition, recordMemory, type LifecycleStatus } from '../utils/bg-handler';
 import type { OperationSchema } from '../utils/types';
+// SPIKE ONLY — forces the KaibanJS module graph into the MV3 service-worker
+// chunk so `pnpm build` answers "does it bundle?". Never called at runtime.
+import { decideInServiceWorker } from '../spikes/kaibanjs/sw-probe';
+
+void decideInServiceWorker;
 
 // Swap strategy implementations as needed:
 //   new LLMStrategy()     — uses ollama for LLM-driven decisions
