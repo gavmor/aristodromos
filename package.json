@@ -11,7 +11,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.typecheck.json --noEmit",
-    "cpd": "jscpd --min-lines 10 --min-tokens 50 --pattern 'utils/**/*.ts'"
+    "cpd": "jscpd --min-lines 10 --min-tokens 50 --pattern 'utils/**/*.ts'",
+    "spike:icepick": "esbuild spike/icepick/run.ts --bundle --platform=node --format=esm --packages=external --outfile=.spike-out/run.mjs && node .spike-out/run.mjs",
+    "spike:icepick:sw": "esbuild spike/icepick/sw-probe.ts --bundle --platform=browser --format=esm --outfile=.spike-out/sw.mjs"
   },
   "keywords": [],
   "author": "",
@@ -34,8 +36,11 @@
     "wxt": "^0.20.26"
   },
   "dependencies": {
+    "@ai-sdk/openai": "1.3.24",
+    "@hatchet-dev/icepick": "^0.1.9",
     "aria-query": "^5.3.2",
     "dom-accessibility-api": "^0.7.1",
-    "fast-json-patch": "^3.1.1"
+    "fast-json-patch": "^3.1.1",
+    "zod": "3.25.76"
   }
 }

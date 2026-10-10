@@ -7,3 +7,4 @@ dist/
 .env.*
 ruvector.db
 lib/
+.spike-out/
