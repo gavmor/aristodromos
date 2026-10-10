@@ -122,6 +122,8 @@ export class AgentLoop {
       satisfied: decision.satisfied,
       remaining: decision.remaining,
       actions: decision.actions,
+      via: decision.via,
+      confidence: decision.confidence,
       ms: (this.deps.now ?? Date.now)() - started,
       error,
     });

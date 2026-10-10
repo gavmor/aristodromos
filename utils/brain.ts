@@ -22,14 +22,35 @@ import type { ContentNode, Scene } from './scene';
 export interface Decision extends Plan {
   /** false when the Scene affords no legal action at all */
   decided: boolean;
+  /** which brain actually produced this, for the evidence log */
+  via?: string;
+  /** calibrated confidence, when the deciding brain reports one */
+  confidence?: number;
 }
 
-const NOTHING_AFFORDED: Decision = {
+/**
+ * The swappable decision seam. Both brains satisfy it, so the loop never learns
+ * which one it is holding: the AI SDK one below, and the System-One one in
+ * `system-one-brain.ts`.
+ */
+export interface BrainInput {
+  scene: Scene;
+  goal: string;
+  signal?: AbortSignal;
+}
+
+export type Brain = (input: BrainInput) => Promise<Decision>;
+
+export const AI_SDK_BRAIN = 'ai-sdk';
+
+/** "The Scene affords nothing" — a real state, reported rather than papered over. */
+export const nothingAfforded = (via: string): Decision => ({
   decided: false,
+  via,
   satisfied: '',
   remaining: '',
   actions: [],
-};
+});
 
 function flags(node: { perception: { disabled: boolean; visible: boolean; inertByModal: boolean } }): string {
   const set = [
@@ -112,7 +133,7 @@ export async function decide(options: {
   const { scene, goal, model, signal } = options;
 
   const built = buildActionSchema(scene);
-  if (!built) return NOTHING_AFFORDED;
+  if (!built) return nothingAfforded(AI_SDK_BRAIN);
 
   const result = await generateObject({
     model,
@@ -130,8 +151,15 @@ export async function decide(options: {
 
   return {
     decided: true,
+    via: AI_SDK_BRAIN,
     satisfied: object.satisfied ?? '',
     remaining: object.remaining ?? '',
     actions,
   };
 }
+
+/** `decide` as a `Brain`: the model is bound once, the Scene arrives per call. */
+export const aiSdkBrain =
+  (model: LanguageModel): Brain =>
+  (input) =>
+    decide({ ...input, model });

@@ -5,7 +5,8 @@
 // an MV3 eviction costs nothing but a reconnect.
 import { createOllama } from 'ollama-ai-provider-v2';
 import { AgentLoop } from '../utils/agent-loop';
-import { decide } from '../utils/brain';
+import { aiSdkBrain, nothingAfforded, type Brain } from '../utils/brain';
+import { createGatedBrain, createSystemOneBrain } from '../utils/system-one-brain';
 import { CONFIG_KEY, DEFAULT_CONFIG, TURN_LOG_KEY, type AgentConfig } from '../utils/agent-config';
 import type { ScenePatch } from '../utils/scene';
 import { AGENT_PORT, type TurnRecord } from '../utils/wire';
@@ -34,6 +35,26 @@ async function setBadge(paused: boolean): Promise<void> {
   await browser.action.setBadgeBackgroundColor({ color: paused ? '#666666' : '#2e7d32' });
 }
 
+/**
+ * Assemble the brain for one decision. The seam is a plain function, so the
+ * loop cannot tell which side of it answered.
+ *
+ * With `systemOne` configured the cheap classifier decides first and the Ollama
+ * brain becomes the confidence-gated fallback; without it, the Ollama brain is
+ * the whole brain, exactly as before.
+ */
+function brainFor(config: AgentConfig): Brain {
+  const ollama = createOllama({ baseURL: config.baseURL });
+  const slow = aiSdkBrain(ollama.chat(config.model));
+  if (!config.systemOne) return slow;
+
+  return createGatedBrain({
+    fast: createSystemOneBrain({ baseURL: config.systemOne.baseURL, model: config.systemOne.model }),
+    slow,
+    threshold: config.systemOne.threshold,
+  });
+}
+
 export default defineBackground(() => {
   let paused = false;
   const loops = new Set<AgentLoop>();
@@ -55,9 +76,8 @@ export default defineBackground(() => {
     const loop = new AgentLoop({
       decide: async (scene, signal) => {
         const config = await readConfig();
-        if (!config.goal) return { decided: false, satisfied: '', remaining: 'no goal configured', actions: [] };
-        const ollama = createOllama({ baseURL: config.baseURL });
-        return decide({ scene, goal: config.goal, model: ollama.chat(config.model), signal });
+        if (!config.goal) return { ...nothingAfforded('unconfigured'), remaining: 'no goal configured' };
+        return brainFor(config)({ scene, goal: config.goal, signal });
       },
       send: (message) => port.postMessage(message),
       record: (turn) => {
