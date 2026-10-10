@@ -1,0 +1,7 @@
+allowBuilds:
+  esbuild: true
+  lefthook: true
+  spawn-sync: true
+
+overrides:
+  '@webext-core/fake-browser': 1.3.4
