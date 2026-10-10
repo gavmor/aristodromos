@@ -20,15 +20,53 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { readFile } from 'node:fs/promises';
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SceneProjector } from '../utils/scene-projector';
 import { createSystemOneBrain } from '../utils/system-one-brain';
 import { ACTION_QUESTION, buildActionQuestions, describeState } from '../utils/system-one-questions';
-import { askSystemOne, isChoiceAnswer, isNoulAnswer } from '../utils/system-one';
+import { askSystemOne, isChoiceAnswer, isNoulAnswer, type FetchLike } from '../utils/system-one';
 import type { Scene } from '../utils/scene';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Node's global fetch (undici) gives up 300 s after the request is sent if no
+ * response HEADERS have arrived, and nothing in standard `fetch` can raise that
+ * ceiling — `AbortSignal` can only shorten it. A 27B classifier served from CPU
+ * takes longer than that for a single forward pass (measured: ~2.3 tok/s prompt
+ * processing, so a 255-token state blob alone is ~110 s), and llama-server sends
+ * no headers until the answer is ready. So the run dies with
+ * `UND_ERR_HEADERS_TIMEOUT` while the SERVER is still working correctly.
+ *
+ * That ceiling is a property of the client, not of the decision under test, so
+ * the probe injects a patient one through the `fetchImpl` seam `askSystemOne`
+ * already exposes for its unit tests. The agent itself never needs this: in MV3
+ * it runs on the browser's fetch, and a GPU-resident server answers in seconds.
+ */
+const patientFetch: FetchLike = (url, init) =>
+  new Promise((resolve, reject) => {
+    const target = new URL(url);
+    const send = target.protocol === 'https:' ? httpsRequest : httpRequest;
+    const outbound = send(
+      target,
+      { method: init.method ?? 'POST', headers: init.headers as Record<string, string>, timeout: 0 },
+      (response) => {
+        let body = '';
+        response.setEncoding('utf8');
+        response.on('data', (chunk: string) => {
+          body += chunk;
+        });
+        response.on('end', () => resolve(new Response(body, { status: response.statusCode ?? 502 })));
+        response.on('error', reject);
+      },
+    );
+    outbound.on('error', reject);
+    init.signal?.addEventListener('abort', () => outbound.destroy(new Error('aborted')));
+    outbound.end(init.body as string);
+  });
 
 const BASE_URL = process.env.JEV_BASE_URL ?? 'http://localhost:18080';
 const MODEL = process.env.JEV_MODEL ?? 'autojev';
@@ -72,6 +110,7 @@ async function classify(title: string, scene: Scene): Promise<string> {
 
   const response = await askSystemOne({
     baseURL: BASE_URL,
+    fetchImpl: patientFetch,
     request: { model: MODEL, state: describeState(scene, GOAL), questions: built.questions },
   });
 
@@ -128,7 +167,10 @@ describe(`System-One over a real Scene @ ${BASE_URL}`, () => {
   });
 
   it('the brain emits the decoded action with a calibrated confidence', async () => {
-    const decision = await createSystemOneBrain({ baseURL: BASE_URL, model: MODEL })({ scene: filled, goal: GOAL });
+    const decision = await createSystemOneBrain({ baseURL: BASE_URL, model: MODEL, fetchImpl: patientFetch })({
+      scene: filled,
+      goal: GOAL,
+    });
     console.log(`\n[probe] brain: via=${decision.via} confidence=${decision.confidence.toFixed(3)}`);
     console.log(`  actions: ${JSON.stringify(decision.actions)}`);
     if (decision.needsValue) console.log(`  needsValue=${decision.needsValue} (the gate would call the AI SDK brain)`);
