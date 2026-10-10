@@ -7,3 +7,10 @@ pre-commit:
       run: pnpm test
     cpd:
       run: pnpm cpd
+    # Spike (eval/promptfoo): promptfoo is a SECOND runner alongside vitest — it
+    # does not host our unit tests and vitest cannot host its evals. It earns a
+    # slot here only because the mock brains make it offline and ~1.7s; the
+    # moment it grades a real model it must move to CI, since a commit hook
+    # cannot afford network or tokens.
+    eval:
+      run: pnpm eval:gate

@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+#
+# Steerability bake-off: one dataset, two mock policies, one exact-match metric.
+#
+# Everything here is local and offline. The "providers" are mock brains, not
+# models; no API key is read and no request leaves the box. That is the property
+# that makes this runnable as a commit gate.
+#
+# Two runs off this one file (see package.json):
+#   pnpm eval:gate     -> deterministic brain only; MUST be 3/3, exit 0.
+#   pnpm eval:bakeoff  -> both brains; the random floor is EXPECTED to fail,
+#                         which is the evidence that the gate discriminates.
+description: 'Steerability: does the policy pick the goal-correct trigger, or the confounder?'
+
+# The provider reads the Scene from the typed fixture, so the prompt is only the
+# human-readable label in the results table. When this is pointed at the real
+# brain, the serialised Scene goes here.
+prompts:
+  - |
+    goal: {{goal}}
+    offered triggers: {{offered}}
+    (this scene baits {{distractorActionId}})
+
+providers:
+  - id: file://provider.ts
+    label: deterministic-brain
+    config:
+      brain: deterministic
+  - id: file://provider.ts
+    label: random-brain
+    config:
+      brain: random
+      # Seeded: an unseeded floor is flaky in CI and unquotable in a report.
+      seed: 20261010
+
+# Custom TS graders. No built-in assertion fits an exact choice over a known
+# option set, and llm-rubric would burn a model call to re-derive a known fact.
+defaultTest:
+  assert:
+    - type: javascript
+      value: file://graders.ts:gradeSteerability
+      metric: steerability
+    - type: javascript
+      value: file://graders.ts:gradeDistractorResistance
+      metric: distractor-resistance
+
+# The dataset stays in TypeScript so `tsc` typechecks the Scenes against
+# utils/scene.ts. YAML rows could not be verified that way.
+tests: file://tests.ts
