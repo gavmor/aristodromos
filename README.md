@@ -1,7 +1,26 @@
 # aristodromos
 
-A browser extension that drives a web page toward a goal: it perceives the page
-as a semantic model, decides with a local LLM, actuates, and re-perceives.
+A browser extension whose agent **pursues a goal** on the web — it reads the
+page, strategizes, acts, and adapts across as many steps as the task takes,
+driving the page the way a person chasing an objective would. Under the hood it
+perceives the page as a semantic model, decides with a local LLM, actuates, and
+re-perceives.
+
+## Goal
+
+Give the agent an objective — *"book the cheapest nonstop", "sign in and download
+the latest invoice", "find the seller and message them"* — and let it **pursue
+that goal to completion**: reading the page, choosing the next move, acting,
+seeing what changed, and **adapting its strategy** over however many steps the
+task takes.
+
+A single memoryless, structured decision — look at the current page, emit one
+valid action — is the **atomic step, not the destination**. The direction of the
+project is to compose those steps into genuine goal pursuit: planning a route to
+the objective, carrying forward what has and hasn't worked, recognising dead ends
+and backtracking, and **optimising toward the goal** rather than merely reacting
+to the page in front of it. The loop below is step one — the foundation the rest
+builds on.
 
 ## The loop
 
@@ -29,6 +48,12 @@ and memoryless**, and it closes **through the world**: the reconciler applies a
 plan and then stops, because the projector is already watching and the resulting
 DOM change is itself the next observation. `setState` is convergent by
 construction, so a replayed plan is a no-op rather than a corruption.
+
+Memorylessness is deliberate *for this first step* — it is what makes the loop
+robust and replay-safe — but it is the floor, not the ceiling. Strategizing
+toward a goal (a plan the agent maintains and revises, and memory of what it has
+tried across steps) is the next layer, and it will build **on top of** this loop
+rather than replace it.
 
 ## The action schema is the point
 
