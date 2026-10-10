@@ -27,6 +27,7 @@
     }
   },
   "devDependencies": {
+    "@evalkit/core": "^0.0.2",
     "@webext-core/fake-browser": "1.3.4",
     "jscpd": "^4.2.3",
     "jsdom": "^29.1.1",
