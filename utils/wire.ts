@@ -35,6 +35,10 @@ export interface TurnRecord {
   satisfied: string;
   remaining: string;
   actions: PlanAction[];
+  /** which brain decided, and — on a fallback — why it was handed over */
+  via?: string;
+  /** the deciding brain's calibrated confidence, when it reports one */
+  confidence?: number;
   ms: number;
   error?: string;
 }
