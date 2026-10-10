@@ -15,6 +15,8 @@ import { NodeId } from './scene';
 export class NodeIdMirror {
   private byElement = new WeakMap<Element, NodeId>();
   private bySignature = new Map<string, NodeId>();
+  /** reverse index for the down-edge; weak so it never pins a detached node */
+  private byId = new Map<NodeId, WeakRef<Element>>();
   private seq = 0;
 
   /** Resolve (and if needed mint) a stable NodeId for an element. */
@@ -26,12 +28,14 @@ export class NodeIdMirror {
       const prior = this.bySignature.get(signature);
       if (prior) {
         this.byElement.set(el, prior);
+        this.byId.set(prior, new WeakRef(el));
         return prior;
       }
     }
 
     const id = `n${++this.seq}`;
     this.byElement.set(el, id);
+    this.byId.set(id, new WeakRef(el));
     if (signature) this.bySignature.set(signature, id);
     return id;
   }
@@ -39,6 +43,16 @@ export class NodeIdMirror {
   /** Current id if the element is already tracked, else undefined. */
   peek(el: Element): NodeId | undefined {
     return this.byElement.get(el);
+  }
+
+  /**
+   * The live element behind a NodeId, for actuation. Returns undefined once the
+   * element is gone or detached — the honest answer when a plan arrives for a
+   * node the page has since replaced.
+   */
+  elementFor(id: NodeId): Element | undefined {
+    const el = this.byId.get(id)?.deref();
+    return el?.isConnected ? el : undefined;
   }
 }
 

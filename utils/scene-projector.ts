@@ -1,5 +1,5 @@
 import { compare, Operation } from 'fast-json-patch';
-import { Perception, Scene, ScenePatch } from './scene';
+import { Perception, Scene, SceneNode, ScenePatch } from './scene';
 import { NodeIdMirror } from './node-identity';
 import { parseNode, ParseContext } from './semantic-parser';
 
@@ -64,6 +64,16 @@ export class SceneProjector {
 
   get current(): Scene {
     return this.scene;
+  }
+
+  /** The live element behind a NodeId — the down-edge's only way back to DOM. */
+  elementFor(id: string): Element | undefined {
+    return this.mirror.elementFor(id);
+  }
+
+  /** The node as last projected, for its actuation recipe. */
+  nodeOf(id: string): SceneNode | undefined {
+    return this.scene.nodes[id];
   }
 
   /** Full walk → populate the scene → return a snapshot. */

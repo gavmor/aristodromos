@@ -30,12 +30,16 @@
     "jscpd": "^4.2.3",
     "jsdom": "^29.1.1",
     "lefthook": "^2.1.6",
+    "playwright-core": "^1.57.0",
     "vitest": "^4.1.6",
     "wxt": "^0.20.26"
   },
   "dependencies": {
+    "ai": "^7.0.137",
     "aria-query": "^5.3.2",
     "dom-accessibility-api": "^0.7.1",
-    "fast-json-patch": "^3.1.1"
+    "fast-json-patch": "^3.1.1",
+    "ollama-ai-provider-v2": "^4.0.1",
+    "zod": "^4.6.5"
   }
 }
