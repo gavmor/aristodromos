@@ -7,3 +7,5 @@ dist/
 .env.*
 ruvector.db
 lib/
+spike/.out/
+spike/reliability.log

@@ -1,7 +1,36 @@
 {
   "extends": "./.wxt/tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@": ["."],
+      "@/*": ["./*"],
+      "~": ["."],
+      "~/*": ["./*"],
+      "@@": ["."],
+      "@@/*": ["./*"],
+      "~~": ["."],
+      "~~/*": ["./*"],
+      "@runmesh/core": [
+        "./node_modules/@runmesh/core/dist/framework/packages/core/src/index.d.ts"
+      ],
+      "@runmesh/tools": [
+        "./node_modules/@runmesh/tools/dist/framework/packages/tools/src/index.d.ts"
+      ],
+      "@runmesh/agent": [
+        "./node_modules/@runmesh/agent/dist/framework/packages/agent/src/index.d.ts"
+      ],
+      "@runmesh/schema": [
+        "./node_modules/.pnpm/node_modules/@runmesh/schema/dist/framework/packages/schema/src/index.d.ts"
+      ],
+      "@runmesh/memory": [
+        "./node_modules/.pnpm/node_modules/@runmesh/memory/dist/framework/packages/memory/src/index.d.ts"
+      ]
+    }
+  },
   "exclude": [
     "demo.ts",
-    ".output"
+    ".output",
+    "spike/.out"
   ]
 }
