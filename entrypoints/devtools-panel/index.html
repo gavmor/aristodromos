@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Aristodromos</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Aristodromos</h1>
+      <span id="run-state" class="pill"></span>
+      <button id="toggle-pause" type="button"></button>
+      <div class="activity">
+        <span id="thinking" class="thinking" role="status" hidden>
+          <span class="spinner" aria-hidden="true"></span>
+          <span id="thinking-label"></span>
+        </span>
+        <span id="idle" class="idle" role="status" hidden></span>
+        <button id="decide-now" type="button" title="One fresh decision on this tab's page as it is now">
+          Decide now
+        </button>
+      </div>
+    </header>
+
+    <section id="status">
+      <h2>This tab</h2>
+      <dl>
+        <dt>Last turn</dt>
+        <dd id="last-turn">—</dd>
+        <dt>Satisfied</dt>
+        <dd id="last-satisfied">—</dd>
+        <dt>Remaining</dt>
+        <dd id="last-remaining">—</dd>
+      </dl>
+      <p id="last-error" class="error" hidden></p>
+    </section>
+
+    <form id="config">
+      <h2>Goal and brain</h2>
+      <label>
+        Goal <small>(empty = idle)</small>
+        <textarea id="goal" rows="3"></textarea>
+      </label>
+      <div class="row">
+        <label>Model <input id="model" required /></label>
+        <label>Ollama base URL <input id="base-url" type="url" required /></label>
+      </div>
+      <fieldset id="so-fields">
+        <legend>
+          <label class="inline"><input id="so-enabled" type="checkbox" /> System One in front</label>
+        </legend>
+        <div class="row">
+          <label>Base URL <input id="so-base-url" type="url" required /></label>
+          <label>Model <input id="so-model" required /></label>
+          <label>Threshold <input id="so-threshold" type="number" min="0" max="1" step="0.05" required /></label>
+        </div>
+      </fieldset>
+      <div class="actions">
+        <button type="submit">Save and run</button>
+        <span id="save-note" class="muted"></span>
+      </div>
+    </form>
+
+    <section id="turns">
+      <div class="section-head">
+        <h2>Turns</h2>
+        <label class="inline"><input id="all-tabs" type="checkbox" /> all tabs</label>
+        <button id="clear-log" type="button">Clear log</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Time</th>
+            <th>ms</th>
+            <th>Via</th>
+            <th>Remaining</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="turn-rows"></tbody>
+      </table>
+      <p id="no-turns" class="muted">No turns yet.</p>
+    </section>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

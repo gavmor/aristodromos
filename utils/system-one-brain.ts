@@ -106,7 +106,7 @@ export function createSystemOneBrain(options: SystemOneBrainOptions): SystemOneB
 
     const done = response.answers[DONE_QUESTION];
     if (isNoulAnswer(done) && done.noul >= doneThreshold) {
-      return { decided: true, via: SYSTEM_ONE_BRAIN, confidence: done.noul, satisfied: '', remaining: '', actions: [] };
+      return { decided: true, done: true, via: SYSTEM_ONE_BRAIN, confidence: done.noul, satisfied: '', remaining: '', actions: [] };
     }
 
     const chosen = response.answers[ACTION_QUESTION];

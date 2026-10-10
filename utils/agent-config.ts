@@ -29,12 +29,29 @@ export interface SystemOneSettings {
 
 export const CONFIG_KEY = 'agentConfig';
 export const TURN_LOG_KEY = 'turnLog';
+/** Global pause, shared by the toolbar button and the devtools panel. */
+export const PAUSED_KEY = 'paused';
+/**
+ * Decisions awaiting the brain, in `browser.storage.session`: live state, not
+ * history, so it never outlives the browser session.
+ */
+export const PENDING_KEY = 'pending';
+/**
+ * A "Decide now" request from the panel, in `browser.storage.session`:
+ * `{ tabId, at }`. `at` makes a repeated request a change the background sees.
+ */
+export const DECIDE_NOW_KEY = 'decideNow';
 
 export const DEFAULT_CONFIG: AgentConfig = {
   goal: '',
   model: 'qwen3-coder-ud-q4kxl:latest',
   baseURL: 'http://localhost:11434/api',
 };
+
+/** The stored value laid over the defaults; storage may hold a partial config or nothing. */
+export function resolveConfig(stored: unknown): AgentConfig {
+  return { ...DEFAULT_CONFIG, ...(stored as Partial<AgentConfig> | undefined) };
+}
 
 /**
  * A starting point for the optional path, not a default: 18080 is where the

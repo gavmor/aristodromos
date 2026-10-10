@@ -311,10 +311,20 @@ const ROLELESS_TEXT_INPUTS = new Set([
   'password', 'date', 'datetime-local', 'month', 'week', 'time', 'color',
 ]);
 
+/**
+ * Implicit roles the HTML-AAM assigns that `dom-accessibility-api`'s tag table
+ * lacks. Without `p`, every paragraph of prose on a page was dropped, so the
+ * brain saw a story's choices but never the story.
+ */
+const MISSING_IMPLICIT_ROLES: Record<string, string> = { p: 'paragraph' };
+
 export function resolveRole(el: Element): string | null {
   const role = getRole(el);
   if (role) return role;
-  if (el.tagName.toLowerCase() !== 'input') return null;
+  const tag = el.tagName.toLowerCase();
+  const implicit = MISSING_IMPLICIT_ROLES[tag];
+  if (implicit) return implicit;
+  if (tag !== 'input') return null;
   const type = (el.getAttribute('type') ?? '').toLowerCase();
   return ROLELESS_TEXT_INPUTS.has(type) ? 'textbox' : null;
 }

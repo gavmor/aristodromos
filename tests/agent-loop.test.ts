@@ -3,7 +3,7 @@ import { AgentLoop } from '../utils/agent-loop';
 import { SceneStore } from '../utils/scene-store';
 import type { Decision } from '../utils/brain';
 import type { Perception, Scene, SceneNode, StateNode } from '../utils/scene';
-import type { DownMessage, TurnRecord } from '../utils/wire';
+import type { DownMessage, PendingDecision, TurnRecord } from '../utils/wire';
 
 const perception: Perception = {
   visible: true,
@@ -94,7 +94,7 @@ const act = (nodeId: string, value: string): Decision => ({
   remaining: 'fill it',
   actions: [{ kind: 'setState', nodeId, value }],
 });
-const done: Decision = { decided: true, satisfied: 'all of it', remaining: 'nothing', actions: [] };
+const done: Decision = { decided: true, done: true, satisfied: 'all of it', remaining: '', actions: [] };
 
 describe('AgentLoop', () => {
   it('waits for the scene to settle, then decides exactly once', async () => {
@@ -115,12 +115,13 @@ describe('AgentLoop', () => {
     vi.useRealTimers();
   });
 
-  it('sends idle, not a plan, when the goal is already satisfied', async () => {
+  it('sends idle, not a plan, when the brain judges the goal met, and logs it as done', async () => {
     vi.useFakeTimers();
-    const { loop, sent } = harness([done]);
+    const { loop, sent, turns } = harness([done]);
     loop.ingest({ kind: 'snapshot', scene: sceneWith('d1', field('email')) });
     await vi.advanceTimersByTimeAsync(20);
-    expect(sent[0].kind).toBe('idle');
+    expect(sent[0]).toMatchObject({ kind: 'idle', reason: 'goal met' });
+    expect(turns[0].done).toBe(true);
     vi.useRealTimers();
   });
 
@@ -193,6 +194,181 @@ describe('AgentLoop', () => {
     loop.ingest({ kind: 'snapshot', scene: sceneWith('d1', field('email')) });
     await vi.advanceTimersByTimeAsync(50);
     expect(decide).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('decides on the scene in hand when resumed, without waiting for the page to move', async () => {
+    vi.useFakeTimers();
+    const { loop, decide } = harness([act('email', 'a@b.c')]);
+    loop.setPaused(true);
+    loop.ingest({ kind: 'snapshot', scene: sceneWith('d1', field('email')) });
+    await vi.advanceTimersByTimeAsync(50);
+
+    loop.setPaused(false);
+    await vi.advanceTimersByTimeAsync(20);
+    expect(decide).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('gives a retargeted loop a fresh budget, deciding on the latest scene', async () => {
+    vi.useFakeTimers();
+    const { loop, sent, decide } = harness([act('email', 'a@b.c')], { maxTicks: 2 });
+    for (let i = 0; i < 4; i += 1) {
+      loop.ingest({ kind: 'snapshot', scene: sceneWith('d1', field('email', `v${i}`)) });
+      await vi.advanceTimersByTimeAsync(20);
+    }
+    expect(sent.at(-1)).toMatchObject({ kind: 'idle', reason: 'tick budget exhausted' });
+    // the page keeps moving while exhausted; the replica must keep up
+    loop.ingest({ kind: 'snapshot', scene: sceneWith('d1', field('email', 'latest')) });
+    await vi.advanceTimersByTimeAsync(20);
+    expect(decide).toHaveBeenCalledTimes(2);
+
+    loop.retarget();
+    await vi.advanceTimersByTimeAsync(20);
+    expect(decide).toHaveBeenCalledTimes(3);
+    const scene = decide.mock.calls[2][0] as Scene;
+    expect((scene.nodes.email as StateNode).value).toBe('latest');
+    expect(sent.at(-1)).toMatchObject({ kind: 'plan', tick: 1 });
+    vi.useRealTimers();
+  });
+
+  it('retargets a paused loop without deciding until it is resumed', async () => {
+    vi.useFakeTimers();
+    const { loop, decide } = harness([act('email', 'a@b.c')]);
+    loop.setPaused(true);
+    loop.ingest({ kind: 'snapshot', scene: sceneWith('d1', field('email')) });
+    loop.retarget();
+    await vi.advanceTimersByTimeAsync(50);
+    expect(decide).not.toHaveBeenCalled();
+
+    loop.setPaused(false);
+    await vi.advanceTimersByTimeAsync(20);
+    expect(decide).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('stays stopped through a retarget and a resume', async () => {
+    vi.useFakeTimers();
+    const { loop, decide } = harness([act('email', 'a@b.c')]);
+    loop.setPaused(true);
+    loop.ingest({ kind: 'snapshot', scene: sceneWith('d1', field('email')) });
+    loop.stop();
+    loop.retarget();
+    loop.setPaused(false);
+    await vi.advanceTimersByTimeAsync(50);
+    expect(decide).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('reports the decision as pending until the brain answers', async () => {
+    vi.useFakeTimers();
+    const answer = Promise.withResolvers<Decision>();
+    const pending: (PendingDecision | undefined)[] = [];
+    const loop = new AgentLoop({
+      decide: () => answer.promise,
+      send: () => {},
+      record: () => {},
+      pending: (decision) => pending.push(decision),
+      settleMs: 10,
+      now: () => 1000,
+    });
+    loop.ingest({ kind: 'snapshot', scene: sceneWith('d1', field('email')) });
+    await vi.advanceTimersByTimeAsync(20);
+    expect(pending).toEqual([{ tick: 1, startedAt: 1000, documentId: 'd1', url: 'https://example.test/' }]);
+
+    answer.resolve(done);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pending.at(-1)).toBeUndefined();
+    expect(pending).toHaveLength(2);
+    vi.useRealTimers();
+  });
+
+  it('clears the pending decision when the brain throws', async () => {
+    vi.useFakeTimers();
+    const pending: (PendingDecision | undefined)[] = [];
+    const loop = new AgentLoop({
+      decide: async () => {
+        throw new Error('ollama unreachable');
+      },
+      send: () => {},
+      record: () => {},
+      pending: (decision) => pending.push(decision),
+      settleMs: 10,
+    });
+    loop.ingest({ kind: 'snapshot', scene: sceneWith('d1', field('email')) });
+    await vi.advanceTimersByTimeAsync(20);
+    expect(pending).toHaveLength(2);
+    expect(pending.at(-1)).toBeUndefined();
+    vi.useRealTimers();
+  });
+
+  it('sends nothing to a page that disconnected while the brain was thinking', async () => {
+    vi.useFakeTimers();
+    const answer = Promise.withResolvers<Decision>();
+    const sent: DownMessage[] = [];
+    const pending: (PendingDecision | undefined)[] = [];
+    const loop = new AgentLoop({
+      decide: () => answer.promise,
+      send: (m) => sent.push(m),
+      record: () => {},
+      pending: (decision) => pending.push(decision),
+      settleMs: 10,
+    });
+    loop.ingest({ kind: 'snapshot', scene: sceneWith('d1', field('email')) });
+    await vi.advanceTimersByTimeAsync(20);
+
+    loop.stop();
+    answer.resolve(act('email', 'a@b.c'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sent).toEqual([]);
+    expect(pending.at(-1)).toBeUndefined(); // the spinner still clears
+    vi.useRealTimers();
+  });
+
+  it('replicates a settled snapshot without deciding, until the page moves', async () => {
+    vi.useFakeTimers();
+    const { loop, decide } = harness([act('email', 'a@b.c')]);
+    // a fresh worker after eviction, told the old one went idle on this exact Scene
+    loop.ingest({ kind: 'snapshot', scene: sceneWith('d1', field('email')), settled: true });
+    await vi.advanceTimersByTimeAsync(50);
+    expect(decide).not.toHaveBeenCalled();
+
+    loop.ingest({ kind: 'patch', documentId: 'd1', ops: [{ op: 'replace', path: '/nodes/email/value', value: 'x' }] });
+    await vi.advanceTimersByTimeAsync(20);
+    expect(decide).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('does not decide an idle scene again on resume, but does on retarget', async () => {
+    vi.useFakeTimers();
+    const { loop, decide } = harness([done]);
+    loop.ingest({ kind: 'snapshot', scene: sceneWith('d1', field('email')) });
+    await vi.advanceTimersByTimeAsync(20);
+    expect(decide).toHaveBeenCalledTimes(1);
+
+    loop.setPaused(true);
+    loop.setPaused(false);
+    await vi.advanceTimersByTimeAsync(50);
+    expect(decide).toHaveBeenCalledTimes(1);
+
+    loop.retarget(); // a new goal, or "Decide now"
+    await vi.advanceTimersByTimeAsync(20);
+    expect(decide).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
+  it('decides again when the page moved while an idle answer was being thought up', async () => {
+    vi.useFakeTimers();
+    const answer = Promise.withResolvers<Decision>();
+    const decide = vi.fn().mockReturnValueOnce(answer.promise).mockResolvedValue(done);
+    const loop = new AgentLoop({ decide, send: () => {}, record: () => {}, settleMs: 10 });
+    loop.ingest({ kind: 'snapshot', scene: sceneWith('d1', field('email')) });
+    await vi.advanceTimersByTimeAsync(20);
+
+    loop.ingest({ kind: 'patch', documentId: 'd1', ops: [{ op: 'replace', path: '/nodes/email/value', value: 'x' }] });
+    answer.resolve(done); // judged on the scene before the patch
+    await vi.advanceTimersByTimeAsync(50);
+    expect(decide).toHaveBeenCalledTimes(2);
     vi.useRealTimers();
   });
 });

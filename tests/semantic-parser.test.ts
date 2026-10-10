@@ -51,6 +51,19 @@ describe('parseNode', () => {
     expect(node.text).toBe('Checkout');
   });
 
+  it('projects a plain paragraph as content carrying its prose', () => {
+    document.body.innerHTML = '<p>You are drifting through <a href="#">darkness</a>.<br>You wake.</p>';
+    const node = parseNode(first('p'), ctx);
+    if (node?.category !== 'content') throw new Error('expected content');
+    expect(node.role).toBe('paragraph');
+    expect(node.text).toBe('You are drifting through darkness.You wake.');
+  });
+
+  it('drops a paragraph its author marked presentational', () => {
+    document.body.innerHTML = '<p role="presentation">layout only</p>';
+    expect(parseNode(first('p'), ctx)).toBeNull();
+  });
+
   it('projects a checkbox as a boolean state node', () => {
     document.body.innerHTML = '<input type="checkbox" checked aria-label="Promo">';
     const node = parseNode(first('input'), ctx);

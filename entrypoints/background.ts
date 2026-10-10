@@ -2,14 +2,24 @@
 //
 // One AgentLoop per connected content script. The service worker holds no
 // authoritative state — the Scene replica is rebuilt from the up-edge stream, so
-// an MV3 eviction costs nothing but a reconnect.
+// an MV3 eviction costs nothing but a reconnect. Control state (goal, brain,
+// pause) lives in `browser.storage.local`; the toolbar button and the devtools
+// panel write it, and this worker follows `storage.onChanged`.
 import { createOllama } from 'ollama-ai-provider-v2';
 import { AgentLoop } from '../utils/agent-loop';
 import { aiSdkBrain, nothingAfforded, type Brain } from '../utils/brain';
 import { createGatedBrain, createSystemOneBrain } from '../utils/system-one-brain';
-import { CONFIG_KEY, DEFAULT_CONFIG, TURN_LOG_KEY, type AgentConfig } from '../utils/agent-config';
+import {
+  CONFIG_KEY,
+  DECIDE_NOW_KEY,
+  PAUSED_KEY,
+  PENDING_KEY,
+  TURN_LOG_KEY,
+  resolveConfig,
+  type AgentConfig,
+} from '../utils/agent-config';
 import type { ScenePatch } from '../utils/scene';
-import { AGENT_PORT, type TurnRecord } from '../utils/wire';
+import { AGENT_PORT, type PendingDecision, type TurnRecord } from '../utils/wire';
 
 const TURN_LOG_CAP = 200;
 
@@ -18,7 +28,7 @@ let logWrites: Promise<void> = Promise.resolve();
 
 async function readConfig(): Promise<AgentConfig> {
   const stored = await browser.storage.local.get(CONFIG_KEY);
-  return { ...DEFAULT_CONFIG, ...(stored[CONFIG_KEY] as Partial<AgentConfig> | undefined) };
+  return resolveConfig(stored[CONFIG_KEY]);
 }
 
 function appendTurn(turn: TurnRecord): void {
@@ -56,21 +66,51 @@ function brainFor(config: AgentConfig): Brain {
 }
 
 export default defineBackground(() => {
-  let paused = false;
-  const loops = new Set<AgentLoop>();
+  // Paused until storage says otherwise: a worker woken after eviction must not
+  // act on a page the user had paused.
+  let paused = true;
+  /** every connected page's loop, with the tab it drives */
+  const loops = new Map<AgentLoop, number | undefined>();
+  const pending = new Map<AgentLoop, PendingDecision>();
 
-  void setBadge(paused);
+  const publishPending = (): void => {
+    void browser.storage.session.set({ [PENDING_KEY]: [...pending.values()] });
+  };
+  // A fresh worker has no loops, so nothing it inherited can still be in flight.
+  publishPending();
+
+  const applyPaused = (next: boolean): void => {
+    paused = next;
+    for (const loop of loops.keys()) loop.setPaused(paused);
+    void setBadge(paused);
+    console.log(`[agent] ${paused ? 'paused' : 'resumed'}`);
+  };
+
+  void browser.storage.local.get(PAUSED_KEY).then((stored) => applyPaused(stored[PAUSED_KEY] === true));
+
+  browser.storage.onChanged.addListener((changes, area) => {
+    if (area === 'session') {
+      // "Decide now" from the panel: one fresh decision on that tab's page as it is.
+      const request: unknown = changes[DECIDE_NOW_KEY]?.newValue;
+      if (request && typeof request === 'object' && 'tabId' in request) {
+        for (const [loop, tabId] of loops) if (tabId === request.tabId) loop.retarget();
+      }
+      return;
+    }
+    if (area !== 'local') return;
+    if (PAUSED_KEY in changes) applyPaused(changes[PAUSED_KEY].newValue === true);
+    // A new goal or brain is a new task: every connected page decides afresh.
+    if (CONFIG_KEY in changes) for (const loop of loops.keys()) loop.retarget();
+  });
 
   // ACTION: the toolbar icon is the stop button.
   browser.action.onClicked.addListener(async () => {
-    paused = !paused;
-    for (const loop of loops) loop.setPaused(paused);
-    await setBadge(paused);
-    console.log(`[agent] ${paused ? 'paused' : 'resumed'}`);
+    await browser.storage.local.set({ [PAUSED_KEY]: !paused });
   });
 
   browser.runtime.onConnect.addListener((port) => {
     if (port.name !== AGENT_PORT) return;
+    const tabId = port.sender?.tab?.id;
     console.log(`[agent] content connected from ${port.sender?.url ?? 'unknown'}`);
 
     const loop = new AgentLoop({
@@ -79,19 +119,32 @@ export default defineBackground(() => {
         if (!config.goal) return { ...nothingAfforded('unconfigured'), remaining: 'no goal configured' };
         return brainFor(config)({ scene, goal: config.goal, signal });
       },
-      send: (message) => port.postMessage(message),
+      send: (message) => {
+        try {
+          port.postMessage(message);
+        } catch {
+          // The page left before onDisconnect stopped the loop; nothing to deliver to.
+        }
+      },
       record: (turn) => {
-        console.log(`[agent] turn ${turn.tick}: ${JSON.stringify(turn)}`);
-        appendTurn(turn);
+        const stamped = { ...turn, tabId };
+        console.log(`[agent] turn ${turn.tick}: ${JSON.stringify(stamped)}`);
+        appendTurn(stamped);
+      },
+      pending: (decision) => {
+        if (decision) pending.set(loop, { ...decision, tabId });
+        else pending.delete(loop);
+        publishPending();
       },
     });
     loop.setPaused(paused);
-    loops.add(loop);
+    loops.set(loop, tabId);
 
     port.onMessage.addListener((message) => loop.ingest(message as ScenePatch));
     port.onDisconnect.addListener(() => {
       loop.stop();
       loops.delete(loop);
+      if (pending.delete(loop)) publishPending();
       console.log('[agent] content disconnected');
     });
   });

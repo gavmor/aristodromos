@@ -5,7 +5,7 @@
   - `pnpm add <pkg>` for dependencies
   - `pnpm add -D <pkg>` for dev dependencies
   - `pnpm install` to sync lockfile
-- Locked to `pnpm@10.30.1` via `packageManager` field in `package.json`.
+- Version pinned by the `packageManager` field in `package.json`; pnpm settings live in `pnpm-workspace.yaml`.
 
 ## Commands
 | Command | Action |

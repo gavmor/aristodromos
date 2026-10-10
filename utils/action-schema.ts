@@ -25,7 +25,16 @@ export type PlanAction =
   | { kind: 'setState'; nodeId: string; value: string | number | boolean }
   | { kind: 'clickTrigger'; nodeId: string };
 
-export interface Plan {
+/**
+ * What the model may answer. There is no empty plan: it either ACTS (at least
+ * one action) or declares the goal DONE on this Scene. An empty action list
+ * used to double as "finished", which let a model that simply chose nothing
+ * look exactly like one that had finished; now that answer is not in the
+ * grammar.
+ */
+export type Plan = ActPlan | DonePlan;
+
+interface PlanBase {
   /**
    * What the CURRENT control values already satisfy. Decoded FIRST, on purpose:
    * in a memoryless loop the only record of past actions is the page itself, so
@@ -35,21 +44,34 @@ export interface Plan {
    * tick where both were already filled, and dutifully re-filled them.
    */
   satisfied: string;
+}
+
+export interface ActPlan extends PlanBase {
   /** what the goal still needs, judged as the difference from `satisfied` */
   remaining: string;
-  /** empty = nothing left to do for the goal on this Scene */
-  actions: PlanAction[];
+  actions: [PlanAction, ...PlanAction[]];
+}
+
+export interface DonePlan extends PlanBase {
+  done: true;
 }
 
 export const isStateNode = (n: SceneNode): n is StateNode => n.category === 'state';
 export const isActionNode = (n: SceneNode): n is ActionNode => n.category === 'action';
 
 /**
- * Perceptually reachable RIGHT NOW. `disabled` and `inertByModal` are the two
- * facts that make an otherwise-present node unactuatable, so they gate the enum.
+ * Actuatable by this agent RIGHT NOW. `disabled` and `inertByModal` make an
+ * otherwise-present node unactuatable, so they gate the enum.
+ *
+ * So does a `javascript:` link. Its URL runs as script, and when the click
+ * comes from the content script's isolated world that script falls under the
+ * extension's CSP, which forbids it: Chrome blocks the navigation, nothing on
+ * the page changes, and the loop would wait on a move that never happens.
+ * Links whose handler is an `onclick` (with `href="#"`) are unaffected.
  */
 export function isReachable(node: SceneNode): boolean {
-  return !node.perception.disabled && !node.perception.inertByModal;
+  if (node.perception.disabled || node.perception.inertByModal) return false;
+  return !(isActionNode(node) && node.href?.trim().toLowerCase().startsWith('javascript:'));
 }
 
 /** The value type a particular state node will accept. */
@@ -158,11 +180,10 @@ export function buildActionSchema(scene: Scene): ActionSchema | null {
     members.length === 1 ? members[0] : z.union(members as [z.ZodType, z.ZodType, ...z.ZodType[]]);
 
   return {
-    schema: z.object({
-      satisfied: z.string(),
-      remaining: z.string(),
-      actions: z.array(action),
-    }),
+    schema: z.union([
+      z.object({ satisfied: z.string(), remaining: z.string(), actions: z.array(action).min(1) }),
+      z.object({ satisfied: z.string(), done: z.literal(true) }),
+    ]),
     stateIds: stateNodes.map((n) => n.id),
     triggerIds: triggerNodes.map((n) => n.id),
   };

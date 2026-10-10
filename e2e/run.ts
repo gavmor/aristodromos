@@ -94,13 +94,17 @@ async function main(): Promise<void> {
 
     // Set the goal the way a user would: through the extension's own storage.
     await worker.evaluate(
-      async ([goal, model]) => {
+      async ([goal, model, baseURL]) => {
         await chrome.storage.local.set({
-          agentConfig: { goal, model, baseURL: 'http://localhost:11434/api' },
+          agentConfig: { goal, model, baseURL },
           turnLog: [],
         });
       },
-      [GOAL, process.env.OLLAMA_MODEL ?? 'qwen3-coder-ud-q4kxl:latest'],
+      [
+        GOAL,
+        process.env.OLLAMA_MODEL ?? 'qwen3-coder-ud-q4kxl:latest',
+        process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434/api',
+      ],
     );
 
     const page = await context.newPage();

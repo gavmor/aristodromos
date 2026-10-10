@@ -17,11 +17,21 @@
 // still owns actuation, which is what keeps the loop safe to retry.
 import { generateObject, type LanguageModel } from 'ai';
 import { buildActionSchema, isActionNode, isStateNode, type Plan, type PlanAction } from './action-schema';
-import type { ContentNode, Scene } from './scene';
+import type { Scene } from './scene';
 
-export interface Decision extends Plan {
+/**
+ * The loop's view of one decision. `actions` is empty only in named cases:
+ * `done` (the brain judged the goal met on this Scene), `!decided` (nothing on
+ * the page is legal to act on), and System One's `needsValue` hand-over.
+ */
+export interface Decision {
   /** false when the Scene affords no legal action at all */
   decided: boolean;
+  /** the brain judged the goal met on this Scene; `actions` is empty */
+  done?: boolean;
+  satisfied: string;
+  remaining: string;
+  actions: PlanAction[];
   /** which brain actually produced this, for the evidence log */
   via?: string;
   /** calibrated confidence, when the deciding brain reports one */
@@ -62,6 +72,13 @@ function flags(node: { perception: { disabled: boolean; visible: boolean; inertB
 }
 
 /**
+ * Page text is the model's only view of prose (a story passage, an error
+ * message), so each block goes in whole; one overall budget bounds the prompt.
+ * About 1 500 tokens.
+ */
+const PAGE_TEXT_BUDGET = 6000;
+
+/**
  * Flatten the Scene into the smallest text sufficient to choose a node.
  * Unreachable nodes are still DESCRIBED — "Submit exists but is disabled" is the
  * signal that tells the model to go fill the fields first — even though the
@@ -91,31 +108,47 @@ export function describeScene(scene: Scene): string {
     );
   }
 
-  const readable = nodes
-    .filter((n): n is ContentNode => n.category === 'content' && n.text.trim() !== '')
-    .slice(0, 20)
-    .map((n) => `  - ${n.role}: ${JSON.stringify(n.text.slice(0, 160))}`);
+  const readable: string[] = [];
+  let used = 0;
+  let omitted = 0;
+  for (const node of nodes) {
+    if (node.category !== 'content' || node.text.trim() === '') continue;
+    const room = PAGE_TEXT_BUDGET - used;
+    if (room <= 0) {
+      omitted += 1;
+      continue;
+    }
+    const text = node.text.length > room ? `${node.text.slice(0, room)}…` : node.text;
+    used += text.length;
+    readable.push(`  - ${node.role}: ${JSON.stringify(text)}`);
+  }
+  if (omitted) readable.push(`  (${omitted} more text blocks omitted)`);
   if (readable.length) lines.push('page text:', ...readable);
 
   return lines.join('\n');
 }
 
 const SYSTEM = [
-  'You drive a web page. Fill in the three fields of the schema, in order.',
+  'You drive a web page toward a goal. Read the observation, then answer in the',
+  'schema, field by field.',
   '',
-  'satisfied: read the CURRENT values in the observation and say which parts of',
-  'the goal they already meet. A control that already holds the value the goal',
-  'wants is DONE — you set it on an earlier turn. You have no memory; the page is',
-  'your memory.',
+  'satisfied: read the CURRENT page and say which parts of the goal it already',
+  'meets. A control that already holds the value the goal wants is DONE — you set',
+  'it on an earlier turn. You have no memory; the page is your memory.',
   '',
-  'remaining: the goal minus satisfied. If nothing remains, say so.',
+  'Then answer in ONE of two ways.',
   '',
-  'actions: only what "remaining" calls for. Never re-set a control that is',
-  'already correct. When every field is correct, the only thing left is to click',
-  'the trigger that commits the goal — do that. If the committing trigger is not',
-  'offered to you, it is disabled; set the fields it depends on instead and it',
-  'will be offered on the next observation. If nothing remains at all, emit an',
-  'empty action list.',
+  'To act, give remaining, then actions:',
+  '  remaining: the goal minus satisfied.',
+  '  actions: at least one step toward "remaining". Never re-set a control that',
+  '  is already correct. When every field is correct, click the trigger that',
+  '  commits the goal. If that trigger is not offered to you, it is disabled; set',
+  '  the fields it depends on and it will be offered on the next observation.',
+  '  Where the goal is pursued by navigating (links, menu items, story choices),',
+  '  click the one that best advances it.',
+  '',
+  'To finish, give done: true — only when the page itself shows the goal fully',
+  'met. Having no obvious next step is not done: pick the best available step.',
 ].join('\n');
 
 /**
@@ -143,19 +176,20 @@ export async function decide(options: {
     abortSignal: signal,
   });
 
-  const object = result.object as Plan;
+  const plan = result.object as Plan;
+  if ('done' in plan) {
+    return { decided: true, done: true, via: AI_SDK_BRAIN, satisfied: plan.satisfied, remaining: '', actions: [] };
+  }
+
   // Belt and braces: the grammar already guarantees these ids, so a mismatch
   // here would mean the Scene moved under us, not that the model hallucinated.
   const legal = new Set([...built.stateIds, ...built.triggerIds]);
-  const actions = (object.actions ?? []).filter((a: PlanAction) => legal.has(a.nodeId));
+  const actions = plan.actions.filter((a) => legal.has(a.nodeId));
+  if (actions.length === 0) {
+    throw new Error(`plan named no node this scene affords: ${JSON.stringify(plan.actions)}`);
+  }
 
-  return {
-    decided: true,
-    via: AI_SDK_BRAIN,
-    satisfied: object.satisfied ?? '',
-    remaining: object.remaining ?? '',
-    actions,
-  };
+  return { decided: true, via: AI_SDK_BRAIN, satisfied: plan.satisfied, remaining: plan.remaining, actions };
 }
 
 /** `decide` as a `Brain`: the model is bound once, the Scene arrives per call. */

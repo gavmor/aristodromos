@@ -201,5 +201,13 @@ export interface Scene {
 
 /** Up-edge payload: full Scene on connect / navigation, patches thereafter. */
 export type ScenePatch =
-  | { kind: 'snapshot'; scene: Scene }
+  | {
+      kind: 'snapshot';
+      scene: Scene;
+      /**
+       * Re-announced on reconnect: a previous background already decided this
+       * exact Scene came to nothing to do. Replicate it; do not decide again.
+       */
+      settled?: boolean;
+    }
   | { kind: 'patch'; documentId: string; ops: Operation[] };

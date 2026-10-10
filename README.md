@@ -74,15 +74,30 @@ discriminated union, not a generic `(nodeId, value)` pair:
   *described* in the observation — "Submit exists but is greyed out" is exactly
   the signal that tells the model to go fill the fields first — they are just not
   nameable as actions.
+- `javascript:` links are dropped too. A click from the content script runs that
+  URL under the extension's CSP, which blocks it, so the click would change
+  nothing. Links driven by `onclick` (the usual `href="#"`) are kept.
 
 A generic schema is satisfied by `clickTrigger` on a text field carrying a value,
 and a weak local model will emit precisely that. Here it has no representation,
 so it never has to be rejected downstream.
 
-The model also decodes `satisfied` and `remaining` **before** `actions`. In a
-memoryless loop the page is the only record of what has already been done, and
-forcing the model to read current values first is what stops it re-filling fields
-it filled a turn ago.
+The model also decodes `satisfied` **before** anything else. In a memoryless
+loop the page is the only record of what has already been done, and forcing the
+model to read current values first is what stops it re-filling fields it filled
+a turn ago.
+
+Around the actions, the plan itself is a union, and there is no empty plan:
+
+```jsonc
+{ "satisfied": "…", "remaining": "…", "actions": [ /* at least one */ ] }
+{ "satisfied": "…", "done": true }
+```
+
+An empty action list used to mean "finished", so a model that simply chose
+nothing looked exactly like one that had finished, and the loop idled with the
+goal unmet. Now the model must act or claim the goal met, and the grammar has no
+third answer.
 
 ## The same guarantee, one layer down: System One
 
@@ -147,8 +162,10 @@ AI SDK brain alone, exactly as before.
 
 ```
 entrypoints/
-├── background.ts       # one AgentLoop per connected tab; goal + turn log in storage
-└── content.ts          # projector, Port, reconciler
+├── background.ts       # one AgentLoop per connected tab; follows goal + pause in storage
+├── content.ts          # projector, Port, reconciler
+├── devtools/           # registers the DevTools panel
+└── devtools-panel/     # control + status: pause, goal/brain config, live turn log
 utils/
 ├── scene.ts            # the Scene contract (faithful page simulacrum)
 ├── scene-projector.ts  # DOM → Scene, dirty-set → targeted JSON-Patch ops
@@ -164,6 +181,7 @@ utils/
 ├── scene-store.ts      # the background's replica, folded from the patch stream
 ├── reconciler.ts       # Plan → page effects, with noop/stale/rejected honesty
 ├── wire.ts             # the Port contract
+├── content-port.ts     # content end of the Port: reconnects after eviction/bfcache, re-announces the Scene
 └── agent-config.ts     # goal + model (+ optional System One), in browser.storage.local
 e2e/
 ├── fixtures/login.html # a form whose submit is disabled until the fields are valid
@@ -186,8 +204,9 @@ e2e/
 
 ## Prerequisites
 
-- **pnpm** 10.30.1 (locked via `packageManager`)
-- **Ollama** on `localhost:11434` with `qwen3-coder-ud-q4kxl:latest`
+- **pnpm**, at the version pinned by `packageManager` in `package.json`
+- **Ollama** on `localhost:11434` (override with `OLLAMA_BASE_URL`, e.g.
+  `http://192.168.0.20:11434/api`) with `qwen3-coder-ud-q4kxl:latest`
   (Qwen3-Coder-30B-A3B, ~17 GB — MoE, 3B active, fast enough to sit in a
   per-observation loop)
 - Chromium at `/usr/bin/chromium` for `pnpm e2e` (override with `CHROMIUM_PATH`)
@@ -198,6 +217,18 @@ e2e/
 
 The agent idles until it is given one — a browser agent with a default goal is an
 agent that starts driving the first page you open.
+
+The **Aristodromos** tab in DevTools is the control surface: pause/resume, the
+goal, the Ollama model and base URL, the optional System One gate, and a live
+turn log for the inspected tab (or all tabs). **Save and run** applies the
+config to every connected page at once, with a fresh tick budget, without waiting
+for the page to change. While the inspected tab's decision is waiting on the
+brain, a spinner and elapsed timer show in the panel header; the background
+publishes in-flight decisions to `pending` in `browser.storage.session`. When the
+agent is idle on that tab, the header says why (`goal met`, an error, `no goal
+configured`), and **Decide now** runs one fresh decision on the page as it is.
+
+The same state lives in `browser.storage.local`, so it can also be set directly:
 
 ```js
 chrome.storage.local.set({
@@ -218,8 +249,18 @@ chrome.storage.local.set({
 });
 ```
 
-The toolbar icon toggles pause/resume. Every decision is appended to
-`turnLog` in `browser.storage.local`.
+The toolbar icon and the panel share one pause switch (`paused` in storage), so it
+survives service-worker eviction. Resuming decides on the page as it is now.
+Every decision is appended to `turnLog` in `browser.storage.local`, stamped with
+its `tabId`.
+
+The content script reopens its Port whenever it closes underneath it: on
+service-worker eviction it reconnects (which restarts the worker) and opens with
+a full snapshot; around the back/forward cache it lets go on the way in and
+reconnects on restore. If the old worker had already gone idle on that exact
+Scene, the snapshot is marked `settled`, and the new worker does not ask the
+model about it again. Reloading the extension itself is different: the content
+scripts already in open tabs are orphaned, so reload those tabs afterwards.
 
 ## Evidence
 
