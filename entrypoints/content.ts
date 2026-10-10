@@ -15,7 +15,9 @@ import { AGENT_PORT, type DownMessage } from '../utils/wire';
 export default defineContentScript({
   matches: ['<all_urls>'],
   runAt: 'document_idle',
-  allFrames: false,
+  // Every frame perceives and acts for itself; the background composes the
+  // tab's frames into one Scene and routes each action to its frame.
+  allFrames: true,
   main(ctx) {
     let projector: SceneProjector | undefined;
 

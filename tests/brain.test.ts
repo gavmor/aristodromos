@@ -68,6 +68,21 @@ describe('describeScene', () => {
     expect(text).toContain(JSON.stringify(`${'x'.repeat(1000)}…`)); // the third is cut at the budget
     expect(text).toContain('(1 more text blocks omitted)');
   });
+
+  it('spends the text budget on what is on screen first', () => {
+    const offscreen = (id: string): ContentNode => ({ ...paragraph(id, 'c'.repeat(3000)), perception: { ...perception, inViewport: false } });
+    const story = 'You wake in a tunnel.';
+    // Page order puts a store page's comments first; the game's passage is on screen.
+    const text = describeScene(sceneOf(offscreen('f0.p1'), offscreen('f0.p2'), offscreen('f0.p3'), paragraph('f14.p1', story)));
+    expect(text).toContain(JSON.stringify(story));
+    expect(text.indexOf(story)).toBeLessThan(text.indexOf('ccc'));
+  });
+
+  it('lists on-screen triggers before the page around them', () => {
+    const offscreenLink = { ...choice('f0.n167', 'Community'), perception: { ...perception, inViewport: false } };
+    const text = describeScene(sceneOf(offscreenLink, choice('f4.n29', 'Begin the story')));
+    expect(text.indexOf('f4.n29')).toBeLessThan(text.indexOf('f0.n167'));
+  });
 });
 
 describe('decide', () => {

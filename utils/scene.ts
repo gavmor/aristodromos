@@ -197,6 +197,19 @@ export interface Scene {
   /** if set, only nodes within this subtree are reachable */
   activeModalId?: NodeId;
   nodes: Record<NodeId, SceneNode>;
+  /**
+   * Set on a tab's COMPOSED Scene (see TabScene): every frame it was built
+   * from, by frame id, with the document that frame showed. Node ids are then
+   * frame-namespaced, `f<frameId>.<id>`.
+   */
+  frames?: Record<string, FrameInfo>;
+}
+
+/** One frame of a composed Scene, as it was when composed. */
+export interface FrameInfo {
+  documentId: string;
+  url: string;
+  title: string;
 }
 
 /** Up-edge payload: full Scene on connect / navigation, patches thereafter. */

@@ -26,9 +26,9 @@ builds on.
 
 ```
 ┌──────────────────────────┐                      ┌───────────────────────────┐
-│ Content script (per tab) │  Scene snapshot      │ Background service worker │
+│ Content script (per frame)│  Scene snapshot     │ Background service worker │
 │                          │  ───────────────→    │                           │
-│  SceneProjector          │  then JSON-Patch     │  SceneStore (replica)     │
+│  SceneProjector          │  then JSON-Patch     │  TabScene (frames → one)  │
 │   · semantic-parser      │  deltas              │  AgentLoop (settle timer) │
 │   · node-identity        │                      │  buildActionSchema(Scene) │
 │   · perception sources   │  ←───────────────    │  brain → Ollama           │
@@ -38,16 +38,27 @@ builds on.
           └──────── the page changes ─────────────────────────────┘
 ```
 
-One `browser.runtime.connect` Port per content-script lifetime. A full `Scene`
-goes up on connect and on navigation; everything after that is `fast-json-patch`
-deltas. Port disconnect is the lifecycle end — there is no teardown message to
-lose.
+One `browser.runtime.connect` Port per content-script lifetime, and one content
+script per **frame**: the top document and every iframe, cross-origin included.
+A full `Scene` goes up on connect and on navigation; everything after that is
+`fast-json-patch` deltas. Port disconnect is the lifecycle end — there is no
+teardown message to lose.
+
+The background keeps one loop per **tab**. `TabScene` folds each frame's stream
+into its own replica and composes them into the one Scene the brain sees, with
+node ids namespaced by frame (`f0.n12` is the top document's, `f14.n3` is an
+iframe's). A plan's actions route back to their frames by that prefix, in each
+frame's own ids. Frames under 100×100 (tracking pixels, hidden iframes) are left
+out. The observation lists what is on screen first, so a page wrapped around an
+embedded frame (a store page around a game) does not bury the frame.
 
 There are no watermarks, acks or sequence numbers. The loop is **at-least-once
 and memoryless**, and it closes **through the world**: the reconciler applies a
 plan and then stops, because the projector is already watching and the resulting
 DOM change is itself the next observation. `setState` is convergent by
-construction, so a replayed plan is a no-op rather than a corruption.
+construction, so a replayed plan is a no-op rather than a corruption. A plan that
+is applied but changes nothing (a dead link) would leave the page silent, so after
+a few seconds without change the loop decides again, within its tick budget.
 
 Memorylessness is deliberate *for this first step* — it is what makes the loop
 robust and replay-safe — but it is the floor, not the ceiling. Strategizing
@@ -162,7 +173,7 @@ AI SDK brain alone, exactly as before.
 
 ```
 entrypoints/
-├── background.ts       # one AgentLoop per connected tab; follows goal + pause in storage
+├── background.ts       # one AgentLoop per tab, over all its frames; follows goal + pause in storage
 ├── content.ts          # projector, Port, reconciler
 ├── devtools/           # registers the DevTools panel
 └── devtools-panel/     # control + status: pause, goal/brain config, turn log, live Scene
@@ -178,7 +189,8 @@ utils/
 ├── system-one-questions.ts # Scene → choice questions; slug ↔ (verb, nodeId)
 ├── system-one-brain.ts # the System One brain + the confidence gate
 ├── agent-loop.ts       # settle debounce, tick budget, decide/emit (no browser API)
-├── scene-store.ts      # the background's replica, folded from the patch stream
+├── scene-store.ts      # one frame's replica, folded from its patch stream
+├── tab-scene.ts        # a tab's frames composed into one Scene; frame-namespaced node ids
 ├── reconciler.ts       # Plan → page effects, with noop/stale/rejected honesty
 ├── wire.ts             # the Port contract
 ├── content-port.ts     # content end of the Port: reconnects after eviction/bfcache, re-announces the Scene
@@ -230,7 +242,7 @@ configured`), and **Decide now** runs one fresh decision on the page as it is.
 
 The **Scene** section is a live, collapsible view of the inspected tab's Scene:
 the background forwards that tab's snapshot and patch stream over a dedicated
-Port, and the panel folds it into its own `SceneStore`, so it shows exactly what
+Port, and the panel composes it into its own `TabScene`, so it shows exactly what
 the brain decides on. Expanded nodes stay expanded as the page changes. The
 viewer is `@andypf/json-viewer`, with a one-line pnpm patch
 (`patches/@andypf__json-viewer@2.8.0.patch`): unpatched, any data update after

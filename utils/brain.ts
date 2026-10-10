@@ -17,7 +17,7 @@
 // still owns actuation, which is what keeps the loop safe to retry.
 import { generateObject, type LanguageModel } from 'ai';
 import { buildActionSchema, isActionNode, isStateNode, type Plan, type PlanAction } from './action-schema';
-import type { Scene } from './scene';
+import type { ContentNode, Scene } from './scene';
 
 /**
  * The loop's view of one decision. `actions` is empty only in named cases:
@@ -86,7 +86,17 @@ const PAGE_TEXT_BUDGET = 6000;
  */
 export function describeScene(scene: Scene): string {
   const lines = [`page: ${scene.title} <${scene.url}>`];
-  const nodes = Object.values(scene.nodes);
+  const frames = Object.entries(scene.frames ?? {});
+  if (frames.length > 1) {
+    lines.push('frames (node ids start with their frame):');
+    for (const [frameId, frame] of frames) lines.push(`  - f${frameId}: ${frame.title} <${frame.url}>`);
+  }
+  // What is on screen goes first, in every list: around an embedded frame (a
+  // store page, its links, its comments), the page's own nodes come before the
+  // frame's in document order, and would bury what the user is looking at.
+  const nodes = Object.values(scene.nodes).toSorted(
+    (a, b) => Number(b.perception.inViewport) - Number(a.perception.inViewport),
+  );
 
   lines.push('controls (setState):');
   for (const node of nodes) {
@@ -108,11 +118,11 @@ export function describeScene(scene: Scene): string {
     );
   }
 
+  const texts = nodes.filter((node): node is ContentNode => node.category === 'content' && node.text.trim() !== '');
   const readable: string[] = [];
   let used = 0;
   let omitted = 0;
-  for (const node of nodes) {
-    if (node.category !== 'content' || node.text.trim() === '') continue;
+  for (const node of texts) {
     const room = PAGE_TEXT_BUDGET - used;
     if (room <= 0) {
       omitted += 1;

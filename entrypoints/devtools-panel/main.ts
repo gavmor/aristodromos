@@ -17,7 +17,7 @@ import {
   type AgentConfig,
 } from '../../utils/agent-config';
 import type { PlanAction } from '../../utils/action-schema';
-import { SceneStore } from '../../utils/scene-store';
+import { TabScene } from '../../utils/tab-scene';
 import {
   INSPECT_PORT,
   type InspectMessage,
@@ -263,7 +263,7 @@ void browser.storage.session.get(PENDING_KEY).then((stored) => setPending(stored
 
 // ── live Scene ───────────────────────────────────────────────────────────────
 
-const replica = new SceneStore();
+let replica = new TabScene();
 const viewer = document.createElement('andypf-json-viewer');
 Object.assign(viewer, {
   expanded: 1,
@@ -285,7 +285,10 @@ function renderScene(): void {
   const scene = replica.current;
   ui.noScene.hidden = scene !== null;
   ui.sceneView.hidden = scene === null;
-  ui.sceneMeta.textContent = scene ? `${Object.keys(scene.nodes).length} nodes · ${scene.title || scene.url}` : '';
+  const frameCount = scene ? Object.keys(scene.frames).length : 0;
+  ui.sceneMeta.textContent = scene
+    ? `${Object.keys(scene.nodes).length} nodes${frameCount > 1 ? ` in ${frameCount} frames` : ''} · ${scene.title || scene.url}`
+    : '';
   if (scene) viewer.data = scene;
 }
 
@@ -293,14 +296,22 @@ function inspect(): void {
   // The extension was reloaded: this panel is orphaned and can never reconnect.
   if (!browser.runtime?.id) return;
   const port = browser.runtime.connect({ name: INSPECT_PORT });
-  port.onMessage.addListener((message) => {
-    if (!replica.ingest(message as InspectMessage) || renderQueued) return;
+  // The old replica keeps showing until this connection's first word, which
+  // replaces it: frames that vanished while disconnected must not linger.
+  let fresh = true;
+  port.onMessage.addListener((raw) => {
+    if (fresh) {
+      replica = new TabScene();
+      fresh = false;
+    }
+    const message = raw as InspectMessage;
+    const changed = 'gone' in message ? replica.drop(message.frameId) : replica.ingest(message.frameId, message.message);
+    if (!changed || renderQueued) return;
     renderQueued = true;
     window.setTimeout(renderScene, 200);
   });
   port.onDisconnect.addListener(() => {
-    // The worker was evicted. Connecting again restarts it, and the replica
-    // keeps showing the last Scene until the new worker sends a fresh one.
+    // The worker was evicted. Connecting again restarts it.
     void browser.runtime.lastError;
     window.setTimeout(inspect, 500);
   });

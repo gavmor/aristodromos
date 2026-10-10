@@ -24,8 +24,10 @@ export type DownMessage =
 
 /**
  * The DevTools panel's read-only view of one tab's Scene. The panel connects,
- * names its tab, and from then on receives exactly what that tab's content
- * script sends up: the current Scene first, then every snapshot and patch.
+ * names its tab, and from then on receives exactly what that tab's frames send
+ * up, each tagged with its frame: every frame's current Scene first, then every
+ * snapshot and patch, and word when a frame goes away. The panel composes them
+ * the same way the background does (TabScene).
  */
 export const INSPECT_PORT = 'aristodromos-inspect';
 
@@ -36,7 +38,7 @@ export interface InspectRequest {
 }
 
 /** background -> panel */
-export type InspectMessage = ScenePatch;
+export type InspectMessage = { frameId: number; message: ScenePatch } | { frameId: number; gone: true };
 
 /** A decision awaiting the brain; published so a UI can show the wait. */
 export interface PendingDecision {

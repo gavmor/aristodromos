@@ -1,7 +1,8 @@
 // Background: the decision half.
 //
-// One AgentLoop per connected content script. The service worker holds no
-// authoritative state — the Scene replica is rebuilt from the up-edge stream, so
+// One AgentLoop per tab, deciding on the Scene composed from all of that tab's
+// frames; each frame's content script has its own Port. The service worker
+// holds no authoritative state — the Scene replica is rebuilt from the up-edge stream, so
 // an MV3 eviction costs nothing but a reconnect. Control state (goal, brain,
 // pause) lives in `browser.storage.local`; the toolbar button and the devtools
 // panel write it, and this worker follows `storage.onChanged`. A panel that
@@ -78,13 +79,17 @@ export default defineBackground(() => {
   // Paused until storage says otherwise: a worker woken after eviction must not
   // act on a page the user had paused.
   let paused = true;
-  /** every connected page's loop, with the tab it drives */
-  const loops = new Map<AgentLoop, number | undefined>();
-  const pending = new Map<AgentLoop, PendingDecision>();
+  /** One agent per tab: its loop, and the port of each frame composing it. */
+  interface TabAgent {
+    loop: AgentLoop;
+    ports: Map<number, Browser.runtime.Port>;
+  }
+  const tabs = new Map<number, TabAgent>();
+  const pending = new Map<number, PendingDecision>();
   /** DevTools panels watching a tab's Scene, with the tab each one inspects */
   const inspectors = new Map<Browser.runtime.Port, number>();
 
-  const toInspectors = (tabId: number | undefined, message: InspectMessage): void => {
+  const toInspectors = (tabId: number, message: InspectMessage): void => {
     for (const [port, watched] of inspectors) {
       if (watched !== tabId) continue;
       try {
@@ -101,9 +106,43 @@ export default defineBackground(() => {
   // A fresh worker has no loops, so nothing it inherited can still be in flight.
   publishPending();
 
+  const agentFor = (tabId: number): TabAgent => {
+    const existing = tabs.get(tabId);
+    if (existing) return existing;
+    const ports = new Map<number, Browser.runtime.Port>();
+    const loop = new AgentLoop({
+      decide: async (scene, signal) => {
+        const config = await readConfig();
+        if (!config.goal) return { ...nothingAfforded('unconfigured'), remaining: 'no goal configured' };
+        return brainFor(config)({ scene, goal: config.goal, signal });
+      },
+      send: (frameId, message) => {
+        try {
+          ports.get(frameId)?.postMessage(message);
+        } catch {
+          // The frame left before its onDisconnect reached us; nothing to deliver to.
+        }
+      },
+      record: (turn) => {
+        const stamped = { ...turn, tabId };
+        console.log(`[agent] turn ${turn.tick}: ${JSON.stringify(stamped)}`);
+        appendTurn(stamped);
+      },
+      pending: (decision) => {
+        if (decision) pending.set(tabId, { ...decision, tabId });
+        else pending.delete(tabId);
+        publishPending();
+      },
+    });
+    loop.setPaused(paused);
+    const agent = { loop, ports };
+    tabs.set(tabId, agent);
+    return agent;
+  };
+
   const applyPaused = (next: boolean): void => {
     paused = next;
-    for (const loop of loops.keys()) loop.setPaused(paused);
+    for (const { loop } of tabs.values()) loop.setPaused(paused);
     void setBadge(paused);
     console.log(`[agent] ${paused ? 'paused' : 'resumed'}`);
   };
@@ -115,14 +154,14 @@ export default defineBackground(() => {
       // "Decide now" from the panel: one fresh decision on that tab's page as it is.
       const request: unknown = changes[DECIDE_NOW_KEY]?.newValue;
       if (request && typeof request === 'object' && 'tabId' in request) {
-        for (const [loop, tabId] of loops) if (tabId === request.tabId) loop.retarget();
+        if (typeof request.tabId === 'number') tabs.get(request.tabId)?.loop.retarget();
       }
       return;
     }
     if (area !== 'local') return;
     if (PAUSED_KEY in changes) applyPaused(changes[PAUSED_KEY].newValue === true);
     // A new goal or brain is a new task: every connected page decides afresh.
-    if (CONFIG_KEY in changes) for (const loop of loops.keys()) loop.retarget();
+    if (CONFIG_KEY in changes) for (const { loop } of tabs.values()) loop.retarget();
   });
 
   // ACTION: the toolbar icon is the stop button.
@@ -135,55 +174,39 @@ export default defineBackground(() => {
       port.onMessage.addListener((raw) => {
         const request = raw as InspectRequest;
         inspectors.set(port, request.tabId);
-        // The newest loop for the tab holds what its page shows now; a
-        // navigation can briefly leave the old one connected too.
-        const scene = [...loops].findLast(([, tabId]) => tabId === request.tabId)?.[0].scene;
-        if (scene) port.postMessage({ kind: 'snapshot', scene } satisfies InspectMessage);
+        // Every frame's current Scene, for the panel to compose its own replica from.
+        for (const [frameId, scene] of tabs.get(request.tabId)?.loop.frames ?? []) {
+          port.postMessage({ frameId, message: { kind: 'snapshot', scene } } satisfies InspectMessage);
+        }
       });
       port.onDisconnect.addListener(() => inspectors.delete(port));
       return;
     }
     if (port.name !== AGENT_PORT) return;
     const tabId = port.sender?.tab?.id;
-    console.log(`[agent] content connected from ${port.sender?.url ?? 'unknown'}`);
+    if (tabId === undefined) return;
+    const frameId = port.sender?.frameId ?? 0;
+    console.log(`[agent] frame ${frameId} of tab ${tabId} connected from ${port.sender?.url ?? 'unknown'}`);
 
-    const loop = new AgentLoop({
-      decide: async (scene, signal) => {
-        const config = await readConfig();
-        if (!config.goal) return { ...nothingAfforded('unconfigured'), remaining: 'no goal configured' };
-        return brainFor(config)({ scene, goal: config.goal, signal });
-      },
-      send: (message) => {
-        try {
-          port.postMessage(message);
-        } catch {
-          // The page left before onDisconnect stopped the loop; nothing to deliver to.
-        }
-      },
-      record: (turn) => {
-        const stamped = { ...turn, tabId };
-        console.log(`[agent] turn ${turn.tick}: ${JSON.stringify(stamped)}`);
-        appendTurn(stamped);
-      },
-      pending: (decision) => {
-        if (decision) pending.set(loop, { ...decision, tabId });
-        else pending.delete(loop);
-        publishPending();
-      },
-    });
-    loop.setPaused(paused);
-    loops.set(loop, tabId);
+    const agent = agentFor(tabId);
+    // A navigated frame keeps its frame id; its new content script replaces the old port.
+    agent.ports.set(frameId, port);
 
     port.onMessage.addListener((raw) => {
       const message = raw as ScenePatch;
-      loop.ingest(message);
-      toInspectors(tabId, message);
+      agent.loop.ingest(message, frameId);
+      toInspectors(tabId, { frameId, message });
     });
     port.onDisconnect.addListener(() => {
-      loop.stop();
-      loops.delete(loop);
-      if (pending.delete(loop)) publishPending();
-      console.log('[agent] content disconnected');
+      if (agent.ports.get(frameId) !== port) return; // already replaced by a newer document
+      agent.ports.delete(frameId);
+      agent.loop.dropFrame(frameId);
+      toInspectors(tabId, { frameId, gone: true });
+      console.log(`[agent] frame ${frameId} of tab ${tabId} disconnected`);
+      if (agent.ports.size > 0) return;
+      agent.loop.stop();
+      tabs.delete(tabId);
+      if (pending.delete(tabId)) publishPending();
     });
   });
 });

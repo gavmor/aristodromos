@@ -80,7 +80,7 @@ function harness(decisions: Decision[], overrides = {}): Harness {
   const decide = vi.fn(async () => decisions[Math.min(i++, decisions.length - 1)]);
   const loop = new AgentLoop({
     decide,
-    send: (m) => sent.push(m),
+    send: (_frameId, m) => sent.push(m),
     record: (t) => turns.push(t),
     settleMs: 10,
     ...overrides,
@@ -88,11 +88,12 @@ function harness(decisions: Decision[], overrides = {}): Harness {
   return { loop, sent, turns, decide };
 }
 
+/** The brain answers in the tab's composed ids: node `email` of the top frame is `f0.email`. */
 const act = (nodeId: string, value: string): Decision => ({
   decided: true,
   satisfied: 'nothing yet',
   remaining: 'fill it',
-  actions: [{ kind: 'setState', nodeId, value }],
+  actions: [{ kind: 'setState', nodeId: `f0.${nodeId}`, value }],
 });
 const done: Decision = { decided: true, done: true, satisfied: 'all of it', remaining: '', actions: [] };
 
@@ -155,7 +156,7 @@ describe('AgentLoop', () => {
       decide: async () => {
         throw new Error('ollama unreachable');
       },
-      send: (m) => sent.push(m),
+      send: (_frameId, m) => sent.push(m),
       record: (t) => turns.push(t),
       settleMs: 10,
     });
@@ -172,7 +173,7 @@ describe('AgentLoop', () => {
     const { loop, turns } = harness([act('email', 'a@b.c')]);
     loop.ingest({ kind: 'snapshot', scene: sceneWith('d1', field('email')) });
     await vi.advanceTimersByTimeAsync(20);
-    expect(turns[0].afforded).toEqual({ state: ['email'], trigger: [] });
+    expect(turns[0].afforded).toEqual({ state: ['f0.email'], trigger: [] });
     expect(turns[0].actions).toHaveLength(1);
     vi.useRealTimers();
   });
@@ -227,7 +228,7 @@ describe('AgentLoop', () => {
     await vi.advanceTimersByTimeAsync(20);
     expect(decide).toHaveBeenCalledTimes(3);
     const scene = decide.mock.calls[2][0] as Scene;
-    expect((scene.nodes.email as StateNode).value).toBe('latest');
+    expect((scene.nodes['f0.email'] as StateNode).value).toBe('latest');
     expect(sent.at(-1)).toMatchObject({ kind: 'plan', tick: 1 });
     vi.useRealTimers();
   });
@@ -309,7 +310,7 @@ describe('AgentLoop', () => {
     const pending: (PendingDecision | undefined)[] = [];
     const loop = new AgentLoop({
       decide: () => answer.promise,
-      send: (m) => sent.push(m),
+      send: (_frameId, m) => sent.push(m),
       record: () => {},
       pending: (decision) => pending.push(decision),
       settleMs: 10,
@@ -370,5 +371,86 @@ describe('AgentLoop', () => {
     await vi.advanceTimersByTimeAsync(50);
     expect(decide).toHaveBeenCalledTimes(2);
     vi.useRealTimers();
+  });
+
+  it('decides again when a plan leaves the page unchanged', async () => {
+    vi.useFakeTimers();
+    const { loop, decide } = harness([act('email', 'a@b.c')], { noEffectMs: 1000 });
+    loop.ingest({ kind: 'snapshot', scene: sceneWith('d1', field('email')) });
+    await vi.advanceTimersByTimeAsync(20);
+    expect(decide).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1000); // the click went nowhere
+    expect(decide).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
+  it('waits on the page, not the clock, when a plan does move it', async () => {
+    vi.useFakeTimers();
+    const { loop, decide } = harness([act('email', 'a@b.c'), done], { noEffectMs: 1000 });
+    loop.ingest({ kind: 'snapshot', scene: sceneWith('d1', field('email')) });
+    await vi.advanceTimersByTimeAsync(20);
+    loop.ingest({ kind: 'patch', documentId: 'd1', ops: [{ op: 'replace', path: '/nodes/email/value', value: 'a@b.c' }] });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(decide).toHaveBeenCalledTimes(2); // once on the patch, never again on the timer
+    vi.useRealTimers();
+  });
+
+  describe('across frames', () => {
+    const frames = () => {
+      const sent: [number, DownMessage][] = [];
+      const answer = { next: done };
+      const decide = vi.fn(async (_scene: Scene) => answer.next);
+      const loop = new AgentLoop({ decide, send: (frameId, m) => sent.push([frameId, m]), record: () => {}, settleMs: 10 });
+      loop.ingest({ kind: 'snapshot', scene: sceneWith('top-doc', field('search')) }, 0);
+      loop.ingest({ kind: 'snapshot', scene: sceneWith('game-doc', field('name')) }, 14);
+      return { loop, sent, decide, answer };
+    };
+
+    it('routes each action to the frame that owns it, in that frame\u2019s ids and document', async () => {
+      vi.useFakeTimers();
+      const { sent, answer } = frames();
+      answer.next = {
+        decided: true,
+        satisfied: '',
+        remaining: 'x',
+        actions: [
+          { kind: 'setState', nodeId: 'f14.name', value: 'Ada' },
+          { kind: 'setState', nodeId: 'f0.search', value: 'crowns' },
+          { kind: 'clickTrigger', nodeId: 'f14.go' },
+        ],
+      };
+      await vi.advanceTimersByTimeAsync(20);
+
+      expect(sent).toEqual([
+        [14, { kind: 'plan', documentId: 'game-doc', tick: 1, satisfied: '', remaining: 'x', actions: [{ kind: 'setState', nodeId: 'name', value: 'Ada' }, { kind: 'clickTrigger', nodeId: 'go' }] }],
+        [0, { kind: 'plan', documentId: 'top-doc', tick: 1, satisfied: '', remaining: 'x', actions: [{ kind: 'setState', nodeId: 'search', value: 'crowns' }] }],
+      ]);
+      vi.useRealTimers();
+    });
+
+    it('tells every frame when it goes idle, each about its own document', async () => {
+      vi.useFakeTimers();
+      const { sent } = frames();
+      await vi.advanceTimersByTimeAsync(20);
+      expect(sent).toEqual([
+        [0, { kind: 'idle', documentId: 'top-doc', tick: 1, reason: 'goal met' }],
+        [14, { kind: 'idle', documentId: 'game-doc', tick: 1, reason: 'goal met' }],
+      ]);
+      vi.useRealTimers();
+    });
+
+    it('decides again when a frame goes away, on what is left', async () => {
+      vi.useFakeTimers();
+      const { loop, decide } = frames();
+      await vi.advanceTimersByTimeAsync(20);
+      expect(decide).toHaveBeenCalledTimes(1);
+
+      loop.dropFrame(14);
+      await vi.advanceTimersByTimeAsync(20);
+      expect(decide).toHaveBeenCalledTimes(2);
+      expect(Object.keys(decide.mock.calls[1][0].nodes)).toEqual(['f0.search']);
+      vi.useRealTimers();
+    });
   });
 });
