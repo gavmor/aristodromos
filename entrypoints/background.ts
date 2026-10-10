@@ -1,102 +1,78 @@
-import { RandomClickStrategy } from '../utils/random-click-strategy';
-import type { AgentStrategy } from '../utils/strategy';
-import { decideSceneTransition, recordMemory, type LifecycleStatus } from '../utils/bg-handler';
-import type { OperationSchema } from '../utils/types';
+// Background: the decision half.
+//
+// One AgentLoop per connected content script. The service worker holds no
+// authoritative state — the Scene replica is rebuilt from the up-edge stream, so
+// an MV3 eviction costs nothing but a reconnect.
+import { createOllama } from 'ollama-ai-provider-v2';
+import { AgentLoop } from '../utils/agent-loop';
+import { decide } from '../utils/brain';
+import { CONFIG_KEY, DEFAULT_CONFIG, TURN_LOG_KEY, type AgentConfig } from '../utils/agent-config';
+import type { ScenePatch } from '../utils/scene';
+import { AGENT_PORT, type TurnRecord } from '../utils/wire';
 
-// Swap strategy implementations as needed:
-//   new LLMStrategy()     — uses ollama for LLM-driven decisions
-//   new RandomClickStrategy() — picks random clickable elements for testing
-const strategy: AgentStrategy = new RandomClickStrategy();
+const TURN_LOG_CAP = 200;
 
-let lifecycleStatus: LifecycleStatus = 'idle';
-let memories: string[] = [];
-let activeAIController: AbortController | null = null;
-let paused = false;
+/** Serialise the read-modify-write; two ports can settle in the same tick. */
+let logWrites: Promise<void> = Promise.resolve();
 
-function logStatus(s: LifecycleStatus) {
-  lifecycleStatus = s;
-  console.log(`[Lifecycle] Status → ${s}`);
+async function readConfig(): Promise<AgentConfig> {
+  const stored = await browser.storage.local.get(CONFIG_KEY);
+  return { ...DEFAULT_CONFIG, ...(stored[CONFIG_KEY] as Partial<AgentConfig> | undefined) };
+}
+
+function appendTurn(turn: TurnRecord): void {
+  logWrites = logWrites.then(async () => {
+    const stored = await browser.storage.local.get(TURN_LOG_KEY);
+    const log = (Array.isArray(stored[TURN_LOG_KEY]) ? stored[TURN_LOG_KEY] : []) as TurnRecord[];
+    log.push(turn);
+    await browser.storage.local.set({ [TURN_LOG_KEY]: log.slice(-TURN_LOG_CAP) });
+  });
+}
+
+async function setBadge(paused: boolean): Promise<void> {
+  await browser.action.setBadgeText({ text: paused ? '⏸' : '▶' });
+  await browser.action.setBadgeBackgroundColor({ color: paused ? '#666666' : '#2e7d32' });
 }
 
 export default defineBackground(() => {
-  logStatus('ruminating');
-  console.log(`[Agent] Using strategy: ${strategy.name}`);
-  memories = ['Browser automation agent initialized', 'Goal: Explore page and interact with elements'];
+  let paused = false;
+  const loops = new Set<AgentLoop>();
 
-  // Show running badge on startup
-  browser.action.setBadgeText({ text: '▶' });
-  browser.action.setBadgeBackgroundColor({ color: '#2e7d32' });
+  void setBadge(paused);
 
-  // ACTION: click extension icon to pause/resume the agent
+  // ACTION: the toolbar icon is the stop button.
   browser.action.onClicked.addListener(async () => {
     paused = !paused;
-    await browser.action.setBadgeText({ text: paused ? '⏸' : '▶' });
-    await browser.action.setBadgeBackgroundColor({ color: paused ? '#666' : '#2e7d32' });
-    console.log(`[Action] Agent ${paused ? 'paused' : 'resumed'}`);
+    for (const loop of loops) loop.setPaused(paused);
+    await setBadge(paused);
+    console.log(`[agent] ${paused ? 'paused' : 'resumed'}`);
   });
 
-  // PROCESSOR: handle SCENE_UPDATED from content
-  browser.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
-    if (message.direction !== 'C2B' || message.type !== 'SCENE_UPDATED') return;
+  browser.runtime.onConnect.addListener((port) => {
+    if (port.name !== AGENT_PORT) return;
+    console.log(`[agent] content connected from ${port.sender?.url ?? 'unknown'}`);
 
-    // When paused, ignore scene updates silently
-    if (paused) {
-      sendResponse({ status: 'paused' });
-      return false;
-    }
+    const loop = new AgentLoop({
+      decide: async (scene, signal) => {
+        const config = await readConfig();
+        if (!config.goal) return { decided: false, satisfied: '', remaining: 'no goal configured', actions: [] };
+        const ollama = createOllama({ baseURL: config.baseURL });
+        return decide({ scene, goal: config.goal, model: ollama.chat(config.model), signal });
+      },
+      send: (message) => port.postMessage(message),
+      record: (turn) => {
+        console.log(`[agent] turn ${turn.tick}: ${JSON.stringify(turn)}`);
+        appendTurn(turn);
+      },
+    });
+    loop.setPaused(paused);
+    loops.add(loop);
 
-    const { scene, schema } = message.payload as {
-      scene: { newInformation: string[]; affordances: Record<string, any> };
-      schema: OperationSchema;
-    };
-
-    // Pure decision: is the task complete? should we abort previous loop?
-    const decision = decideSceneTransition(scene, lifecycleStatus, activeAIController != null);
-
-    if (decision.transition === 'complete') {
-      logStatus('terminated');
-      sendResponse({ status: 'success' });
-      return false;
-    }
-
-    if (decision.transition === 'abort') {
-      activeAIController!.abort();
-    }
-
-    logStatus('acting');
-    activeAIController = new AbortController();
-
-    strategy.decide(schema, scene.newInformation, activeAIController.signal)
-      .then((agentDecision) => {
-        const ops = agentDecision.operations;
-        console.log(`[Agent] ${strategy.name} reasoning:`, agentDecision.reasoning);
-
-        // Check for LLM-signaled completion (/complete path)
-        const hasComplete = ops.some((op) => op.path === '/complete');
-        if (hasComplete) {
-          logStatus('terminated');
-          sendResponse({ status: 'success' });
-          return;
-        }
-
-        const actionable = ops.filter((op) => op.path !== '/complete');
-        if (actionable.length > 0) {
-          const tabId = sender.tab?.id;
-          if (tabId != null) {
-            browser.tabs.sendMessage(tabId, {
-              direction: 'B2C', type: 'EXECUTE_OT', payload: actionable,
-            }).catch(() => {});
-          }
-        }
-
-        memories = recordMemory(memories, `Step: ${agentDecision.reasoning}`);
-        sendResponse({ status: 'success' });
-      })
-      .catch((err: Error) => {
-        console.error(`[Agent] ${strategy.name} error:`, err.message);
-        sendResponse({ status: err.name === 'AbortError' ? 'canceled' : 'error', error: err.message });
-      });
-
-    return true; // keep channel open
+    port.onMessage.addListener((message) => loop.ingest(message as ScenePatch));
+    port.onDisconnect.addListener(() => {
+      loop.stop();
+      loops.delete(loop);
+      console.log('[agent] content disconnected');
+    });
   });
 });

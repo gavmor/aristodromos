@@ -1,0 +1,29 @@
+(node:1961898) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/user/code/aristodromos/.worktrees/t_221cc74e/e2e/run.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/user/code/aristodromos/.worktrees/t_221cc74e/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[e2e] extension service worker up: chrome-extension://blendcdhjlekkclobagfkmmpinddddlf/background.js
+[e2e] goal: Sign in as alice@example.com with the password hunter2, and remember this device.
+[e2e] navigating to http://127.0.0.1:34305/login
+  page [agent] tick 1 remaining="Email address, Password, Remember this device" -> setState(n5)=applied setState(n6)=applied setState(n7)=applied
+  page [agent] tick 2 remaining="Nothing remains. All fields are correctly set according to the goal." -> clickTrigger(n8)=applied
+
+[e2e] ───────── turn log ─────────
+  tick 1  11452ms  Δ9 ops  afforded[state=3 trigger=0]
+         satisfied: ""
+         remaining: "Email address, Password, Remember this device"
+         emitted:   setState(n5, "alice@example.com"), setState(n6, "hunter2"), setState(n7, true)
+  tick 2  2476ms  Δ5 ops  afforded[state=3 trigger=1]
+         satisfied: "The email address is already set to 'alice@example.com', the password is already set to 'hunter2', and the 'Remember thi"
+         remaining: "Nothing remains. All fields are correctly set according to the goal."
+         emitted:   clickTrigger(n8)
+
+[e2e] ───────── verdict ─────────
+  signed in as:          alice@example.com
+  remember-device set:   true
+  turns taken:           2
+  trigger withheld at t1:true
+  multi-turn sequence:   true
+  evidence:              /home/user/code/aristodromos/.worktrees/t_221cc74e/e2e/evidence
+
+[e2e] PASS — perceive -> decide -> actuate -> re-perceive closed the loop.

@@ -1,63 +1,74 @@
-import { buildAXTree, distillAXTreeToSchema } from '../utils/dom-snapshot';
-import { sendMessageWithAbort, isAbortError } from '../utils/messaging';
-import { applyOperationalTransformAsync } from '../utils/ot-executor';
-import { executeOT } from '../utils/content-handler';
+// Content script: the perception half, and the hands.
+//
+// Up-edge: one Port, a full Scene on connect and on navigation, fast-json-patch
+// deltas thereafter. Down-edge: apply the plan, then do nothing — the projector
+// is already watching, so re-perception is automatic and the loop closes through
+// the page rather than through a reply message.
+import { SceneProjector } from '../utils/scene-projector';
+import { applyPlan, didMove, summarize } from '../utils/reconciler';
+import { AGENT_PORT, type DownMessage } from '../utils/wire';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
   runAt: 'document_idle',
   allFrames: false,
   main(ctx) {
-    let activeUIController: AbortController | null = null;
-    let elementMap = new Map<string, Element>();
+    const port = browser.runtime.connect({ name: AGENT_PORT });
+    let projector: SceneProjector | undefined;
 
-    // Bound executor uses the latest elementMap to resolve synthetic keys
-    const executeWithElementMap = (
-      ops: import('fast-json-patch').Operation[],
-      signal: AbortSignal,
-    ) => applyOperationalTransformAsync(ops, signal, elementMap);
+    const perceive = (): void => {
+      projector?.stop();
+      projector = new SceneProjector({
+        root: document,
+        emit: (patch) => {
+          if (ctx.isInvalid) return;
+          port.postMessage(patch);
+        },
+      });
+      projector.scan();
+      projector.start();
+      projector.reflagModal();
+      port.postMessage(projector.snapshot());
+    };
 
-    // PROCESSOR: handle EXECUTE_OT from background
-    browser.runtime.onMessage.addListener((message: any, _sender, sendResponse) => {
-      if (message.direction === 'B2C' && message.type === 'EXECUTE_OT') {
-        executeOT(message.payload, executeWithElementMap, ctx.signal)
-          .then(sendResponse);
-        return true;
+    port.onMessage.addListener((raw) => {
+      const message = raw as DownMessage;
+      const active = projector;
+      if (!active) return;
+      if (message.kind === 'idle') {
+        console.log(`[agent] tick ${message.tick} idle: ${message.reason}`);
+        return;
+      }
+      // A plan for a document we have navigated away from is discarded; the
+      // snapshot for the new document is already on the wire.
+      if (message.documentId !== active.current.documentId) {
+        console.log(`[agent] tick ${message.tick} dropped: plan for a stale document`);
+        return;
+      }
+      const results = applyPlan(message.actions, {
+        resolve: (id) => active.elementFor(id),
+        nodeOf: (id) => active.nodeOf(id),
+      });
+      console.log(`[agent] tick ${message.tick} remaining=${JSON.stringify(message.remaining)} -> ${summarize(results)}`);
+
+      // The plan changed nothing, so the projector has nothing to report, so the
+      // background would hear silence and conclude we are finished. We are not —
+      // it stalled. Re-offer the same Scene and let it decide again; the tick
+      // budget bounds how long it may keep stalling.
+      if (!didMove(results)) {
+        console.log(`[agent] tick ${message.tick} moved nothing — re-offering the scene`);
+        port.postMessage(active.snapshot());
       }
     });
 
-    // EMITTER: capture scene every 5s
-    ctx.setInterval(async () => {
-      if (ctx.isInvalid) return;
-
-      if (activeUIController) {
-        activeUIController.abort();
-      }
-      activeUIController = new AbortController();
-
-      const combinedSignal = AbortSignal.any
-        ? AbortSignal.any([activeUIController.signal, ctx.signal])
-        : activeUIController.signal;
-
-      const { axNode, elementMap: em } = buildAXTree();
-      elementMap = em;
-      const { scene, schema } = distillAXTreeToSchema(axNode);
-
-      try {
-        const response = await sendMessageWithAbort<{ status: string }>(
-          { direction: 'C2B', type: 'SCENE_UPDATED', payload: { scene, schema } },
-          combinedSignal,
-        );
-        console.log(`[Content] Background response: ${response?.status ?? 'none'}`);
-      } catch (err) {
-        if (!isAbortError(err)) {
-          console.error('[Content] Scene update failed:', err);
-        }
-      }
-    }, 5000);
+    // SPA navigation is a new world: new documentId, new snapshot, fresh mirror.
+    ctx.addEventListener(window, 'wxt:locationchange', () => perceive());
 
     ctx.onInvalidated(() => {
-      activeUIController?.abort();
+      projector?.stop();
+      port.disconnect();
     });
+
+    perceive();
   },
 });

@@ -1,0 +1,29 @@
+(node:1941247) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/user/code/aristodromos/.worktrees/t_221cc74e/e2e/run.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/user/code/aristodromos/.worktrees/t_221cc74e/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[e2e] extension service worker up: chrome-extension://blendcdhjlekkclobagfkmmpinddddlf/background.js
+[e2e] goal: Sign in as alice@example.com with the password hunter2, and remember this device.
+[e2e] navigating to http://127.0.0.1:41925/login
+  page [agent] tick 1 remaining="Set the email address to 'alice@example.com', set the password to 'hunter2', and check the 'Remember this device' checkbox." -> setState(n5)=applied setState(n6)=applied setState(n7)=applied
+  page [agent] tick 2 remaining="Nothing remains." -> clickTrigger(n8)=applied
+
+[e2e] ───────── turn log ─────────
+  tick 1  3899ms  Δ9 ops  afforded[state=3 trigger=0]
+         satisfied: "No fields are currently set to the values required by the goal."
+         remaining: "Set the email address to 'alice@example.com', set the password to 'hunter2', and check the 'Remember this device' checkb"
+         emitted:   setState(n5, "alice@example.com"), setState(n6, "hunter2"), setState(n7, true)
+  tick 2  2224ms  Δ5 ops  afforded[state=3 trigger=1]
+         satisfied: "The email address is set to 'alice@example.com', the password is set to 'hunter2', and the 'Remember this device' checkb"
+         remaining: "Nothing remains."
+         emitted:   clickTrigger(n8)
+
+[e2e] ───────── verdict ─────────
+  signed in as:          alice@example.com
+  remember-device set:   true
+  turns taken:           2
+  trigger withheld at t1:true
+  multi-turn sequence:   true
+  evidence:              /home/user/code/aristodromos/.worktrees/t_221cc74e/e2e/evidence
+
+[e2e] PASS — perceive -> decide -> actuate -> re-perceive closed the loop.

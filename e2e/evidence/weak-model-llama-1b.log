@@ -1,0 +1,97 @@
+(node:1954120) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/user/code/aristodromos/.worktrees/t_221cc74e/e2e/run.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/user/code/aristodromos/.worktrees/t_221cc74e/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[e2e] extension service worker up: chrome-extension://blendcdhjlekkclobagfkmmpinddddlf/background.js
+[e2e] goal: Sign in as alice@example.com with the password hunter2, and remember this device.
+[e2e] navigating to http://127.0.0.1:42589/login
+  page [agent] tick 1 remaining="{\n  " -> setState(n5)=applied setState(n6)=noop setState(n7)=noop
+  page [agent] tick 2 remaining="Sign in as alice@example.com" -> setState(n5)=noop setState(n6)=noop setState(n7)=noop
+  page [agent] tick 2 moved nothing — re-offering the scene
+  page [agent] tick 3 remaining="none" -> setState(n5)=noop setState(n6)=noop setState(n7)=noop
+  page [agent] tick 3 moved nothing — re-offering the scene
+  page [agent] tick 4 remaining="Email address" -> setState(n5)=noop
+  page [agent] tick 4 moved nothing — re-offering the scene
+  page [agent] tick 5 remaining="" -> setState(n5)=noop setState(n6)=noop setState(n7)=noop setState(n6)=noop
+  page [agent] tick 5 moved nothing — re-offering the scene
+  page [agent] tick 6 remaining="Email address" -> setState(n5)=noop setState(n6)=noop setState(n7)=noop
+  page [agent] tick 6 moved nothing — re-offering the scene
+  page [agent] tick 7 remaining="Enter your email and password to continue." -> setState(n5)=noop setState(n6)=noop setState(n7)=noop
+  page [agent] tick 7 moved nothing — re-offering the scene
+  page [agent] tick 8 remaining="0" -> setState(n5)=noop setState(n6)=noop setState(n7)=applied
+  page [agent] tick 9 remaining="Password" -> setState(n6)=noop setState(n5)=noop setState(n7)=noop
+  page [agent] tick 9 moved nothing — re-offering the scene
+  page [agent] tick 10 remaining="Sign in as abc@example.com, sign in as alice@example.com with the password hunter2" -> setState(n5)=noop setState(n6)=noop setState(n7)=noop
+  page [agent] tick 10 moved nothing — re-offering the scene
+  page [agent] tick 11 remaining="Sign in as alice@example.com" -> setState(n5)=noop setState(n6)=noop setState(n7)=noop
+  page [agent] tick 11 moved nothing — re-offering the scene
+  page [agent] tick 12 remaining="Sign in as alice@example.com with the password hunter2, and remember this device." -> setState(n5)=noop setState(n6)=noop setState(n7)=noop
+  page [agent] tick 12 moved nothing — re-offering the scene
+  page [agent] tick 12 idle: tick budget exhausted
+
+[e2e] ───────── turn log ─────────
+  tick 1  436ms  Δ9 ops  afforded[state=3 trigger=0]
+         satisfied: "Sign in as alice@example.com with the password hunter2, and remember this device. "
+         remaining: "{\n  "
+         emitted:   setState(n5, "Email address"), setState(n6, ""), setState(n7, false)
+  tick 2  477ms  Δ1 ops  afforded[state=3 trigger=0]
+         satisfied: "Sign in as alice@example.com"
+         remaining: "Sign in as alice@example.com"
+         emitted:   setState(n5, "Email address"), setState(n6, ""), setState(n7, false)
+  tick 3  438ms  Δ0 ops  afforded[state=3 trigger=0]
+         satisfied: "Sign in as alice@example.com with the password hunter2, and remember this device."
+         remaining: "none"
+         emitted:   setState(n5, "Email address"), setState(n6, ""), setState(n7, false)
+  tick 4  322ms  Δ0 ops  afforded[state=3 trigger=0]
+         satisfied: "true"
+         remaining: "Email address"
+         emitted:   setState(n5, "Email address")
+  tick 5  487ms  Δ0 ops  afforded[state=3 trigger=0]
+         satisfied: "Sign in as alice@example.com with the password hunter2"
+         remaining: ""
+         emitted:   setState(n5, "Email address"), setState(n6, ""), setState(n7, false), setState(n6, "")
+  tick 6  419ms  Δ0 ops  afforded[state=3 trigger=0]
+         satisfied: "The following parts of the goal are already met: Email address, Password, Remember this device"
+         remaining: "Email address"
+         emitted:   setState(n5, "Email address"), setState(n6, ""), setState(n7, false)
+  tick 7  482ms  Δ0 ops  afforded[state=3 trigger=0]
+         satisfied: "Sign in as alice@example.com with the password hunter2, and remember this device."
+         remaining: "Enter your email and password to continue."
+         emitted:   setState(n5, "Email address"), setState(n6, ""), setState(n7, false)
+  tick 8  441ms  Δ0 ops  afforded[state=3 trigger=0]
+         satisfied: "Sign in as alice@example.com with the password hunter2"
+         remaining: "0"
+         emitted:   setState(n5, "Email address"), setState(n6, ""), setState(n7, true)
+  tick 9  405ms  Δ1 ops  afforded[state=3 trigger=0]
+         satisfied: "Email address"
+         remaining: "Password"
+         emitted:   setState(n6, ""), setState(n5, "Email address"), setState(n7, true)
+  tick 10  475ms  Δ0 ops  afforded[state=3 trigger=0]
+         satisfied: "Sign in as alice@example.com with the password hunter2"
+         remaining: "Sign in as abc@example.com, sign in as alice@example.com with the password hunter2"
+         emitted:   setState(n5, "Email address"), setState(n6, ""), setState(n7, true)
+  tick 11  435ms  Δ0 ops  afforded[state=3 trigger=0]
+         satisfied: "Sign in as alice@example.com with the password hunter2, and remember this device"
+         remaining: "Sign in as alice@example.com"
+         emitted:   setState(n5, "Email address"), setState(n6, ""), setState(n7, true)
+  tick 12  565ms  Δ0 ops  afforded[state=3 trigger=0]
+         satisfied: "Sign in as alice@example.com with the password hunter2, and remember this device. The goal is to login to Acme as alice@"
+         remaining: "Sign in as alice@example.com with the password hunter2, and remember this device."
+         emitted:   setState(n5, "Email address"), setState(n6, ""), setState(n7, true)
+
+[e2e] ───────── verdict ─────────
+  signed in as:          (never)
+  remember-device set:   false
+  turns taken:           12
+  trigger withheld at t1:true
+  multi-turn sequence:   false
+  evidence:              /home/user/code/aristodromos/.worktrees/t_221cc74e/e2e/evidence
+file:///home/user/code/aristodromos/.worktrees/t_221cc74e/e2e/run.ts:174
+      throw new Error(`did not converge: expected ${EXPECT_EMAIL}, page reports ${signedInAs ?? 'nothing'}`);
+            ^
+
+Error: did not converge: expected alice@example.com, page reports nothing
+    at main (file:///home/user/code/aristodromos/.worktrees/t_221cc74e/e2e/run.ts:174:13)
+    at async file:///home/user/code/aristodromos/.worktrees/t_221cc74e/e2e/run.ts:184:1
+
+Node.js v26.8.1
