@@ -22,6 +22,22 @@ export type DownMessage =
   | { kind: 'plan'; documentId: string; tick: number; satisfied: string; remaining: string; actions: PlanAction[] }
   | { kind: 'idle'; documentId: string; tick: number; reason: string };
 
+/**
+ * The DevTools panel's read-only view of one tab's Scene. The panel connects,
+ * names its tab, and from then on receives exactly what that tab's content
+ * script sends up: the current Scene first, then every snapshot and patch.
+ */
+export const INSPECT_PORT = 'aristodromos-inspect';
+
+/** panel -> background, once per connection */
+export interface InspectRequest {
+  kind: 'inspect';
+  tabId: number;
+}
+
+/** background -> panel */
+export type InspectMessage = ScenePatch;
+
 /** A decision awaiting the brain; published so a UI can show the wait. */
 export interface PendingDecision {
   tick: number;

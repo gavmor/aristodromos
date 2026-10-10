@@ -4,7 +4,8 @@
 // authoritative state — the Scene replica is rebuilt from the up-edge stream, so
 // an MV3 eviction costs nothing but a reconnect. Control state (goal, brain,
 // pause) lives in `browser.storage.local`; the toolbar button and the devtools
-// panel write it, and this worker follows `storage.onChanged`.
+// panel write it, and this worker follows `storage.onChanged`. A panel that
+// inspects a tab also gets that tab's Scene stream, forwarded as it arrives.
 import { createOllama } from 'ollama-ai-provider-v2';
 import { AgentLoop } from '../utils/agent-loop';
 import { aiSdkBrain, nothingAfforded, type Brain } from '../utils/brain';
@@ -18,8 +19,16 @@ import {
   resolveConfig,
   type AgentConfig,
 } from '../utils/agent-config';
+import type { Browser } from 'wxt/browser';
 import type { ScenePatch } from '../utils/scene';
-import { AGENT_PORT, type PendingDecision, type TurnRecord } from '../utils/wire';
+import {
+  AGENT_PORT,
+  INSPECT_PORT,
+  type InspectMessage,
+  type InspectRequest,
+  type PendingDecision,
+  type TurnRecord,
+} from '../utils/wire';
 
 const TURN_LOG_CAP = 200;
 
@@ -72,6 +81,19 @@ export default defineBackground(() => {
   /** every connected page's loop, with the tab it drives */
   const loops = new Map<AgentLoop, number | undefined>();
   const pending = new Map<AgentLoop, PendingDecision>();
+  /** DevTools panels watching a tab's Scene, with the tab each one inspects */
+  const inspectors = new Map<Browser.runtime.Port, number>();
+
+  const toInspectors = (tabId: number | undefined, message: InspectMessage): void => {
+    for (const [port, watched] of inspectors) {
+      if (watched !== tabId) continue;
+      try {
+        port.postMessage(message);
+      } catch {
+        inspectors.delete(port); // closed before its onDisconnect reached us
+      }
+    }
+  };
 
   const publishPending = (): void => {
     void browser.storage.session.set({ [PENDING_KEY]: [...pending.values()] });
@@ -109,6 +131,18 @@ export default defineBackground(() => {
   });
 
   browser.runtime.onConnect.addListener((port) => {
+    if (port.name === INSPECT_PORT) {
+      port.onMessage.addListener((raw) => {
+        const request = raw as InspectRequest;
+        inspectors.set(port, request.tabId);
+        // The newest loop for the tab holds what its page shows now; a
+        // navigation can briefly leave the old one connected too.
+        const scene = [...loops].findLast(([, tabId]) => tabId === request.tabId)?.[0].scene;
+        if (scene) port.postMessage({ kind: 'snapshot', scene } satisfies InspectMessage);
+      });
+      port.onDisconnect.addListener(() => inspectors.delete(port));
+      return;
+    }
     if (port.name !== AGENT_PORT) return;
     const tabId = port.sender?.tab?.id;
     console.log(`[agent] content connected from ${port.sender?.url ?? 'unknown'}`);
@@ -140,7 +174,11 @@ export default defineBackground(() => {
     loop.setPaused(paused);
     loops.set(loop, tabId);
 
-    port.onMessage.addListener((message) => loop.ingest(message as ScenePatch));
+    port.onMessage.addListener((raw) => {
+      const message = raw as ScenePatch;
+      loop.ingest(message);
+      toInspectors(tabId, message);
+    });
     port.onDisconnect.addListener(() => {
       loop.stop();
       loops.delete(loop);

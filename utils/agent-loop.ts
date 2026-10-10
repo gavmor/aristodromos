@@ -87,6 +87,11 @@ export class AgentLoop {
     this.arm();
   }
 
+  /** the replica the brain decides on; null before the first snapshot */
+  get scene(): Scene | null {
+    return this.store.current;
+  }
+
   stop(): void {
     this.stopped = true;
     this.disarm();

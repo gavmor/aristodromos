@@ -30,6 +30,7 @@
     "wxt": "^0.20.26"
   },
   "dependencies": {
+    "@andypf/json-viewer": "^2.8.0",
     "ai": "^7.0.137",
     "aria-query": "^5.3.2",
     "dom-accessibility-api": "^0.7.1",

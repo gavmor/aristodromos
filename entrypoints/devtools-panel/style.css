@@ -263,6 +263,27 @@ tr.error td {
   }
 }
 
+details#scene {
+  padding: 10px 0;
+}
+
+details#scene > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  cursor: pointer;
+}
+
+#scene-meta {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+#scene-view {
+  margin-top: 6px;
+}
+
 [hidden] {
   display: none !important;
 }

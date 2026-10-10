@@ -1,8 +1,11 @@
 // The devtools panel: control and status for the agent, scoped to the inspected tab.
 //
-// Everything goes through `browser.storage.local`, the same state the background
-// follows. The panel never talks to the service worker directly, so an evicted
-// worker costs nothing here: writes wake it, and storage is the record.
+// Control and status go through `browser.storage.local`, the same state the
+// background follows, so an evicted worker costs nothing here: writes wake it,
+// and storage is the record. The live Scene is the one exception: it changes
+// many times a second, so it streams over an INSPECT_PORT instead, and the
+// panel folds it into its own replica exactly as the background does.
+import '@andypf/json-viewer';
 import {
   CONFIG_KEY,
   DECIDE_NOW_KEY,
@@ -14,7 +17,14 @@ import {
   type AgentConfig,
 } from '../../utils/agent-config';
 import type { PlanAction } from '../../utils/action-schema';
-import type { PendingDecision, TurnRecord } from '../../utils/wire';
+import { SceneStore } from '../../utils/scene-store';
+import {
+  INSPECT_PORT,
+  type InspectMessage,
+  type InspectRequest,
+  type PendingDecision,
+  type TurnRecord,
+} from '../../utils/wire';
 
 function el<T extends HTMLElement>(id: string): T {
   const found = document.getElementById(id);
@@ -47,10 +57,14 @@ const ui = {
   clearLog: el<HTMLButtonElement>('clear-log'),
   turnRows: el<HTMLTableSectionElement>('turn-rows'),
   noTurns: el<HTMLParagraphElement>('no-turns'),
+  sceneMeta: el<HTMLSpanElement>('scene-meta'),
+  sceneView: el<HTMLDivElement>('scene-view'),
+  noScene: el<HTMLParagraphElement>('no-scene'),
 };
 
 const inspectedTabId = browser.devtools.inspectedWindow.tabId;
-document.documentElement.dataset.theme = browser.devtools.panels.themeName === 'dark' ? 'dark' : 'light';
+const dark = browser.devtools.panels.themeName === 'dark';
+document.documentElement.dataset.theme = dark ? 'dark' : 'light';
 
 let paused = false;
 let turns: TurnRecord[] = [];
@@ -246,3 +260,52 @@ void browser.storage.local.get([CONFIG_KEY, PAUSED_KEY, TURN_LOG_KEY]).then((sto
 });
 
 void browser.storage.session.get(PENDING_KEY).then((stored) => setPending(stored[PENDING_KEY]));
+
+// ── live Scene ───────────────────────────────────────────────────────────────
+
+const replica = new SceneStore();
+const viewer = document.createElement('andypf-json-viewer');
+Object.assign(viewer, {
+  expanded: 1,
+  indent: 2,
+  theme: dark ? 'default-dark' : 'default-light',
+  preserveExpanded: true,
+  showDataTypes: false,
+  showToolbar: true,
+  showCopy: true,
+  showSize: true,
+});
+ui.sceneView.append(viewer);
+
+/** Patches arrive far faster than anyone reads; re-render at most every 200 ms. */
+let renderQueued = false;
+
+function renderScene(): void {
+  renderQueued = false;
+  const scene = replica.current;
+  ui.noScene.hidden = scene !== null;
+  ui.sceneView.hidden = scene === null;
+  ui.sceneMeta.textContent = scene ? `${Object.keys(scene.nodes).length} nodes · ${scene.title || scene.url}` : '';
+  if (scene) viewer.data = scene;
+}
+
+function inspect(): void {
+  // The extension was reloaded: this panel is orphaned and can never reconnect.
+  if (!browser.runtime?.id) return;
+  const port = browser.runtime.connect({ name: INSPECT_PORT });
+  port.onMessage.addListener((message) => {
+    if (!replica.ingest(message as InspectMessage) || renderQueued) return;
+    renderQueued = true;
+    window.setTimeout(renderScene, 200);
+  });
+  port.onDisconnect.addListener(() => {
+    // The worker was evicted. Connecting again restarts it, and the replica
+    // keeps showing the last Scene until the new worker sends a fresh one.
+    void browser.runtime.lastError;
+    window.setTimeout(inspect, 500);
+  });
+  port.postMessage({ kind: 'inspect', tabId: inspectedTabId } satisfies InspectRequest);
+}
+
+renderScene();
+inspect();

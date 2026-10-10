@@ -165,7 +165,7 @@ entrypoints/
 ├── background.ts       # one AgentLoop per connected tab; follows goal + pause in storage
 ├── content.ts          # projector, Port, reconciler
 ├── devtools/           # registers the DevTools panel
-└── devtools-panel/     # control + status: pause, goal/brain config, live turn log
+└── devtools-panel/     # control + status: pause, goal/brain config, turn log, live Scene
 utils/
 ├── scene.ts            # the Scene contract (faithful page simulacrum)
 ├── scene-projector.ts  # DOM → Scene, dirty-set → targeted JSON-Patch ops
@@ -227,6 +227,14 @@ brain, a spinner and elapsed timer show in the panel header; the background
 publishes in-flight decisions to `pending` in `browser.storage.session`. When the
 agent is idle on that tab, the header says why (`goal met`, an error, `no goal
 configured`), and **Decide now** runs one fresh decision on the page as it is.
+
+The **Scene** section is a live, collapsible view of the inspected tab's Scene:
+the background forwards that tab's snapshot and patch stream over a dedicated
+Port, and the panel folds it into its own `SceneStore`, so it shows exactly what
+the brain decides on. Expanded nodes stay expanded as the page changes. The
+viewer is `@andypf/json-viewer`, with a one-line pnpm patch
+(`patches/@andypf__json-viewer@2.8.0.patch`): unpatched, any data update after
+a click re-collapses every row, which defeats its `preserveExpanded` option.
 
 The same state lives in `browser.storage.local`, so it can also be set directly:
 
