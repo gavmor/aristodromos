@@ -238,6 +238,13 @@ unchanged — that part is genuinely clean.
 | Node | requires `>=22.22.0` |
 | Config | 1 YAML + 3 TS files, 98 lines of adapter code |
 | Keys needed | **none** for `eval`; an account for `redteam` |
+| Shipped bundle | **unaffected** — `pnpm build` succeeds, `.output/` totals 449.69 kB and contains no `promptfoo` string |
+
+Dev-only, and verified so rather than assumed: `pnpm build` (wxt, chrome-mv3) succeeds on a
+clean `--frozen-lockfile` checkout of this branch, `grep -r promptfoo .output/` finds nothing,
+and `git diff main...eval/promptfoo -- entrypoints utils wxt.config.ts` is empty — the
+extension's build inputs are byte-identical to main, so none of this weight reaches users.
+It is all on developer and CI machines.
 
 What those 74 deps contain is the uncomfortable part: `express`, `socket.io`,
 `drizzle-orm`, `@libsql/client`, six OpenTelemetry packages, `posthog-node`,
