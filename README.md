@@ -84,6 +84,65 @@ memoryless loop the page is the only record of what has already been done, and
 forcing the model to read current values first is what stops it re-filling fields
 it filled a turn ago.
 
+## The same guarantee, one layer down: System One
+
+The decision has a second, cheaper implementation behind the same seam:
+`POST /v1/systemone` against any **Jev-compatible** provider. It is a classifier
+call, not a chat call — you send a `state` and a map of `questions`, and every
+answer is read from **label-token probabilities**. One forward pass, nothing
+parsed out of generated text, and a calibrated confidence per answer.
+
+Where `buildActionSchema` makes an illegal `(verb, nodeId)` pair
+**unrepresentable** in a grammar, `buildActionQuestions` makes it
+**unnameable** in a choice:
+
+```jsonc
+{ "next_action": { "type": "choice", "criteria": {
+    "fill_email_address":          "Set Email address (text control, currently \"\")…",
+    "fill_password":               "Set Password (text control, currently \"\")…",
+    "toggle_remember_this_device": "Set Remember this device (boolean control, currently false)…"
+    // no click_sign_in — the page has it disabled, so it is not an option at all
+}}}
+```
+
+Every legal pair gets exactly one option; an illegal pair gets none, so no amount
+of probability mass can land on it. Disabled and modal-inert nodes are withheld
+from the label set for the same reason they are withheld from the enum — still
+*described* in the state blob, just not choosable.
+
+Labels are slugs of the **accessible name**, not node ids. A model answering from
+label tokens needs the semantics in the label: `fill_email_address` carries
+signal, `n5` does not. The slug → `(verb, nodeId)` map comes back out of the
+builder, so the decode is exact.
+
+Two things System One structurally cannot do, and what each one implies:
+
+- **It cannot generate text.** So a free-text value is never asked of it. The
+  *target* is still chosen by System One, and the AI SDK brain is called only to
+  supply the string. Enumerable values — a checkbox's true/false, a select's own
+  options — *are* label choices, so they ride in the same request and never cross
+  the seam. A `setState` decision takes the **minimum** of target and value
+  confidence: a sure target with an unsure value is not a sure decision.
+- **It cannot decide that nothing is left to do.** Every choice question has a
+  winner, so an action question alone can never terminate the loop. A `noul`
+  (yes/no → P(yes)) carries that judgement instead, and it is the brain's only
+  stop condition.
+
+The **gate** only routes. It never edits a confident decision and never asks the
+big model to ratify one. Low confidence, a needed value, or a System One failure
+all go to the AI SDK brain, and the reason rides in the turn log's `via` field
+next to `confidence`. An optional accelerator must not be able to stop the agent,
+so an unreachable server falls through rather than throwing.
+
+`confidence` is read as an **opaque server output**, never recomputed. Against a
+real jev.cpp response (`p_max` 0.9754878 over K=3, reported 0.96323171) the
+normalized-entropy form `1 - H(p)/ln K` gives 0.880, while the scaled max
+probability `(p_max - 1/K)/(1 - 1/K)` reproduces the reported value exactly — and
+different providers may calibrate differently anyway.
+
+All of this is **additive**: with no `systemOne` in the config the loop runs the
+AI SDK brain alone, exactly as before.
+
 ## Project structure
 
 ```
@@ -98,14 +157,18 @@ utils/
 ├── actuation.ts        # per-node actuation recipes (react-setter, pointer sequence)
 ├── action-schema.ts    # Scene → discriminated-union zod schema
 ├── brain.ts            # Scene + goal → Plan, via AI SDK generateObject
+├── system-one.ts       # typed POST /v1/systemone client (provider-agnostic)
+├── system-one-questions.ts # Scene → choice questions; slug ↔ (verb, nodeId)
+├── system-one-brain.ts # the System One brain + the confidence gate
 ├── agent-loop.ts       # settle debounce, tick budget, decide/emit (no browser API)
 ├── scene-store.ts      # the background's replica, folded from the patch stream
 ├── reconciler.ts       # Plan → page effects, with noop/stale/rejected honesty
 ├── wire.ts             # the Port contract
-└── agent-config.ts     # goal + model, in browser.storage.local
+└── agent-config.ts     # goal + model (+ optional System One), in browser.storage.local
 e2e/
 ├── fixtures/login.html # a form whose submit is disabled until the fields are valid
 ├── run.ts              # headless Chromium, real extension, real Ollama
+├── systemone-probe.test.ts # real projector + real Jev server, one decision per page state
 └── repeat.sh           # run it N times and tally convergence
 ```
 
@@ -119,6 +182,7 @@ e2e/
 | `pnpm typecheck` | `tsc --noEmit` |
 | `pnpm cpd` | Copy-paste detection |
 | `pnpm e2e` | Build, then drive a real page headlessly end to end |
+| `pnpm probe` | One System One decision per page state, against a real Jev server |
 
 ## Prerequisites
 
@@ -127,6 +191,8 @@ e2e/
   (Qwen3-Coder-30B-A3B, ~17 GB — MoE, 3B active, fast enough to sit in a
   per-observation loop)
 - Chromium at `/usr/bin/chromium` for `pnpm e2e` (override with `CHROMIUM_PATH`)
+- *Optional*, for the System One path: any server speaking `POST /v1/systemone`.
+  Point `pnpm probe` at it with `JEV_BASE_URL` / `JEV_MODEL`.
 
 ## Setting a goal
 
@@ -139,6 +205,15 @@ chrome.storage.local.set({
     goal: 'Sign in as alice@example.com with the password hunter2.',
     model: 'qwen3-coder-ud-q4kxl:latest',
     baseURL: 'http://localhost:11434/api',
+
+    // Optional. Omit it and the Ollama brain decides every turn, as before.
+    // Present, and the classifier decides first with Ollama as the fallback
+    // below `threshold` (or whenever a free-text value is needed).
+    systemOne: {
+      baseURL: 'http://localhost:18080',
+      model: 'autojev',
+      threshold: 0.6,
+    },
   },
 });
 ```
