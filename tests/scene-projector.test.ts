@@ -81,4 +81,37 @@ describe('SceneProjector.flush', () => {
     const patch = onlyPatch(patches);
     expect(patch.ops.some((o) => o.op === 'remove')).toBe(true);
   });
+
+  it('projects everything inside a subtree added in one insertion', async () => {
+    const { proj, patches } = makeProjector();
+    proj.scan();
+    proj.start();
+    // A story engine swaps in a whole passage: generic wrapper, prose, choices.
+    const passage = document.createElement('div');
+    passage.innerHTML =
+      '<p>Would you like the cheat sheet?</p><label><input type="radio" name="c"> No thanks</label><a href="#next">Continue</a>';
+    document.body.append(passage);
+    await Promise.resolve(); // MutationObserver delivers in the microtask queued by the append
+    proj.flush();
+    proj.stop();
+
+    const roles = Object.values(proj.current.nodes).map((n) => n.role);
+    expect(roles).toEqual(expect.arrayContaining(['paragraph', 'radio', 'link']));
+    expect(onlyPatch(patches).ops.filter((o) => o.op === 'add')).toHaveLength(3);
+  });
+
+  it('drops everything inside a subtree removed in one go', async () => {
+    document.body.innerHTML = '<div id="passage"><p>Old passage.</p><a href="#a">Old choice</a></div><button>Menu</button>';
+    const { proj, patches } = makeProjector();
+    proj.scan();
+    proj.start();
+    document.getElementById('passage')!.remove();
+    await Promise.resolve(); // MutationObserver delivers in the microtask queued by the removal
+    proj.flush();
+    proj.stop();
+
+    expect(Object.values(proj.current.nodes).map((n) => n.role)).not.toEqual(expect.arrayContaining(['paragraph']));
+    expect(Object.values(proj.current.nodes).some((n) => n.role === 'link')).toBe(false);
+    expect(onlyPatch(patches).ops.filter((o) => o.op === 'remove')).toHaveLength(2);
+  });
 });

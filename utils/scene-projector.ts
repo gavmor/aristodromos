@@ -44,6 +44,8 @@ export class SceneProjector {
   private scheduled = false;
   private lastFocused: Element | null = null;
   private teardown: Array<() => void> = [];
+  /** kept so elements added after start() are watched for viewport changes too */
+  private viewportObserver: IntersectionObserver | undefined;
 
   constructor(private deps: ProjectorDeps) {
     const doc = deps.root;
@@ -166,7 +168,11 @@ export class SceneProjector {
         for (const e of entries) this.setGlobalPerception(e.target, { inViewport: e.isIntersecting });
       });
       for (const el of Array.from(doc.querySelectorAll('*'))) io.observe(el);
-      this.teardown.push(() => io.disconnect());
+      this.viewportObserver = io;
+      this.teardown.push(() => {
+        io.disconnect();
+        this.viewportObserver = undefined;
+      });
     }
 
     const view = doc.defaultView;
@@ -224,14 +230,25 @@ export class SceneProjector {
     let modalChanged = false;
     for (const rec of records) {
       if (rec.target instanceof Element) this.markDirty(rec.target);
+      // A record names only the ROOT of an added or removed subtree. Pages that
+      // render a whole section at once (a story passage, a framework re-render)
+      // put everything that matters below it, so walk it.
       for (const n of Array.from(rec.addedNodes)) {
-        if (n instanceof Element) {
-          this.markDirty(n);
-          if (isDialogEl(n)) modalChanged = true;
+        if (!(n instanceof Element)) continue;
+        for (const el of [n, ...Array.from(n.querySelectorAll('*'))]) {
+          this.markDirty(el);
+          this.viewportObserver?.observe(el);
+          if (isDialogEl(el)) modalChanged = true;
         }
       }
       for (const n of Array.from(rec.removedNodes)) {
-        if (n instanceof Element && isDialogEl(n)) modalChanged = true;
+        if (!(n instanceof Element)) continue;
+        for (const el of [n, ...Array.from(n.querySelectorAll('*'))]) {
+          // Only what was projected has anything to remove.
+          if (this.mirror.peek(el)) this.markDirty(el);
+          this.viewportObserver?.unobserve(el);
+          if (isDialogEl(el)) modalChanged = true;
+        }
       }
     }
     if (modalChanged) this.reflagModal();
