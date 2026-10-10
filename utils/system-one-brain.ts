@@ -28,7 +28,7 @@ import {
   buildActionQuestions,
   describeState,
 } from './system-one-questions';
-import { askSystemOne, isChoiceAnswer, isNoulAnswer, type FetchLike } from './system-one';
+import { askSystemOne, isChoiceAnswer, isNoulAnswer, MAX_CHOICE_CRITERIA, type FetchLike } from './system-one';
 
 export const SYSTEM_ONE_BRAIN = 'system-one';
 
@@ -82,6 +82,16 @@ export function createSystemOneBrain(options: SystemOneBrainOptions): SystemOneB
   return async ({ scene, goal, signal }) => {
     const built = buildActionQuestions(scene);
     if (!built) return { ...nothingAfforded(SYSTEM_ONE_BRAIN), confidence: 0 };
+
+    // A choice question tops out at 255 criteria. Past that, not every legal
+    // action can be NAMED — and the one guarantee this brain sells is that the
+    // option set is exactly the legal set. Refusing is the honest move: the gate
+    // treats a System-One failure as a fallback to the big model (which has no
+    // such ceiling, since its enum is a grammar), and records the reason.
+    const offered = Object.keys(built.actions).length;
+    if (offered > MAX_CHOICE_CRITERIA) {
+      throw new Error(`scene affords ${offered} actions, over the ${MAX_CHOICE_CRITERIA}-criteria choice limit`);
+    }
 
     const response = await askSystemOne({
       baseURL: options.baseURL,

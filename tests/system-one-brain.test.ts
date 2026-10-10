@@ -3,7 +3,8 @@ import { createGatedBrain, createSystemOneBrain } from '../utils/system-one-brai
 import { ACTION_QUESTION, DONE_QUESTION, valueQuestionKey } from '../utils/system-one-questions';
 import type { Brain, Decision } from '../utils/brain';
 import type { SystemOneAnswer } from '../utils/system-one';
-import { loginScene, sceneOf } from './fixtures/scene';
+import { MAX_CHOICE_CRITERIA } from '../utils/system-one';
+import { loginScene, sceneOf, stateNode } from './fixtures/scene';
 
 const choice = (pick: string, confidence: number): SystemOneAnswer => ({
   type: 'choice',
@@ -118,6 +119,26 @@ describe('createSystemOneBrain', () => {
       [DONE_QUESTION]: { type: 'noul', noul: 0.01 },
     });
     await expect(ask(brain)).rejects.toThrow(/was not offered/);
+  });
+
+  it('refuses a scene it cannot NAME in full rather than silently dropping options', async () => {
+    const { brain, fetchImpl } = brainWith({});
+    const crowded = sceneOf(
+      ...Array.from({ length: MAX_CHOICE_CRITERIA + 1 }, (_, i) => stateNode({ id: `n${i}`, name: `Field ${i}` })),
+    );
+    await expect(ask(brain, crowded)).rejects.toThrow(/over the 255-criteria choice limit/);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('serves a scene exactly at the limit', async () => {
+    const atLimit = sceneOf(
+      ...Array.from({ length: MAX_CHOICE_CRITERIA }, (_, i) => stateNode({ id: `n${i}`, name: `Field ${i}` })),
+    );
+    const { brain } = brainWith({
+      [ACTION_QUESTION]: choice('fill_field_0', 0.8),
+      [DONE_QUESTION]: { type: 'noul', noul: 0.01 },
+    });
+    expect((await ask(brain, atLimit)).needsValue).toBe('n0');
   });
 });
 

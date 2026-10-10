@@ -44,7 +44,14 @@ export interface SystemOneRequest {
 export type SystemOneAnswer =
   | { type: 'noul'; noul: number }
   | { type: 'choice'; choice: string; probabilities: Record<string, number>; confidence: number }
-  | { type: 'score'; score: number; probabilities: Record<string, number>; confidence: number };
+  | { type: 'score'; score: number; probabilities: Record<string, number>; confidence: number; legend?: string[] };
+
+/**
+ * The protocol's ceiling on a single choice question: 1–255 option descriptions
+ * (jev.cpp tools/server/README.md). It matters here because it is a hard limit
+ * on how many legal actions one question can NAME — see system-one-brain.ts.
+ */
+export const MAX_CHOICE_CRITERIA = 255;
 
 export interface SystemOneResponse {
   model: string;
