@@ -2,6 +2,9 @@ import { RandomClickStrategy } from '../utils/random-click-strategy';
 import type { AgentStrategy } from '../utils/strategy';
 import { decideSceneTransition, recordMemory, type LifecycleStatus } from '../utils/bg-handler';
 import type { OperationSchema } from '../utils/types';
+// SPIKE ONLY — forces @mastra/core into the MV3 service-worker bundle so the
+// WXT build tells us whether it survives. Revert with the branch.
+import { decideWithMastra } from '../spike/bg-bundle-probe';
 
 // Swap strategy implementations as needed:
 //   new LLMStrategy()     — uses ollama for LLM-driven decisions
@@ -21,6 +24,8 @@ function logStatus(s: LifecycleStatus) {
 export default defineBackground(() => {
   logStatus('ruminating');
   console.log(`[Agent] Using strategy: ${strategy.name}`);
+  // SPIKE ONLY — a live reference so the bundler cannot tree-shake Mastra away.
+  (globalThis as Record<string, unknown>).__mastraSpike = decideWithMastra;
   memories = ['Browser automation agent initialized', 'Goal: Explore page and interact with elements'];
 
   // Show running badge on startup
