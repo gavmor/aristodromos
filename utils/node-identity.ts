@@ -26,7 +26,10 @@ export class NodeIdMirror {
 
     if (signature) {
       const prior = this.bySignature.get(signature);
-      if (prior) {
+      // Re-attach only for a remount: the element that held the id must be
+      // gone. A live one keeps it, or two elements would share a NodeId and a
+      // plan meant for one would land on the other.
+      if (prior && !this.elementFor(prior)) {
         this.byElement.set(el, prior);
         this.byId.set(prior, new WeakRef(el));
         return prior;

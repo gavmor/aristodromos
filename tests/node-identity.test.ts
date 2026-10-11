@@ -29,6 +29,16 @@ describe('NodeIdMirror', () => {
     expect(mirror.idFor(remounted, sig)).toBe(id);
   });
 
+  it('never hands a live element\u2019s id to another element with its signature', () => {
+    // An unnamed list item inserted at position 2 has the old signature of the item it pushed down.
+    const sig = 'listitem||body:1/ul:1/li:2';
+    const live = document.body.appendChild(document.createElement('li'));
+    const id = mirror.idFor(live, sig);
+    const newcomer = document.body.appendChild(document.createElement('li'));
+    expect(mirror.idFor(newcomer, sig)).not.toBe(id);
+    expect(mirror.elementFor(id)).toBe(live);
+  });
+
   it('peek returns undefined for untracked elements', () => {
     expect(mirror.peek(document.createElement('div'))).toBeUndefined();
   });
