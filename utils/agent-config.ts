@@ -29,8 +29,20 @@ export interface SystemOneSettings {
 
 export const CONFIG_KEY = 'agentConfig';
 export const TURN_LOG_KEY = 'turnLog';
-/** Global pause, shared by the toolbar button and the devtools panel. */
+/** Global pause across every enabled tab, set from the devtools panel. */
 export const PAUSED_KEY = 'paused';
+/**
+ * The tabs the agent is switched on for, in `browser.storage.session` (a tab
+ * id means nothing once the browser restarts): `number[]`. It runs nowhere
+ * else, not even in a tab its own click opened.
+ */
+export const ENABLED_TABS_KEY = 'enabledTabs';
+
+/** The stored enabled tabs as a set; anything malformed reads as none. */
+export function enabledTabsOf(stored: unknown): Set<number> {
+  return new Set(Array.isArray(stored) ? stored.filter((id): id is number => typeof id === 'number') : []);
+}
+
 /**
  * Decisions awaiting the brain, in `browser.storage.session`: live state, not
  * history, so it never outlives the browser session.

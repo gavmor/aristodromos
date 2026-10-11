@@ -269,11 +269,20 @@ e2e/
 The agent idles until it is given one — a browser agent with a default goal is an
 agent that starts driving the first page you open.
 
-The **Aristodromos** tab in DevTools is the control surface: pause/resume, the
-goal, the Ollama model and base URL, the optional System One gate, and a live
-turn log for the inspected tab (or all tabs). **Save and run** applies the
-config to every connected page at once, with a fresh tick budget, without waiting
-for the page to change. While the inspected tab's decision is waiting on the
+It also runs **only in tabs you switch it on for**: click the toolbar icon in a
+tab to switch it on or off there (the badge shows ▶, or ⏸ while paused, and is
+blank where it is off), or use the panel's switch. Everywhere else it still
+perceives, so the panel can show the Scene, but it never acts — not even in a
+tab its own click opened. The switched-on tabs live in `enabledTabs` in
+`browser.storage.session`, since a tab id means nothing after a restart, and a
+closed tab drops out.
+
+The **Aristodromos** tab in DevTools is the control surface: the switch for this
+tab, a global pause/resume, the goal, the Ollama model and base URL, the
+optional System One gate, and a live turn log for the inspected tab (or all
+tabs). **Save and run** applies the config to every tab the agent is on for, with
+a fresh tick budget, without waiting for the page to change. While the inspected
+tab's decision is waiting on the
 brain, a spinner and elapsed timer show in the panel header; the background
 publishes in-flight decisions to `pending` in `browser.storage.session`. When the
 agent is idle on that tab, the header says why (`goal met`, an error, `no goal
@@ -308,8 +317,8 @@ chrome.storage.local.set({
 });
 ```
 
-The toolbar icon and the panel share one pause switch (`paused` in storage), so it
-survives service-worker eviction. Resuming decides on the page as it is now.
+The global pause (`paused` in `browser.storage.local`) survives service-worker
+eviction. Resuming, or switching a tab on, decides on the page as it is now.
 Every decision is appended to `turnLog` in `browser.storage.local`, stamped with
 its `tabId`.
 

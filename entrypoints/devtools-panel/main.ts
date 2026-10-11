@@ -9,10 +9,12 @@ import '@andypf/json-viewer';
 import {
   CONFIG_KEY,
   DECIDE_NOW_KEY,
+  ENABLED_TABS_KEY,
   PAUSED_KEY,
   PENDING_KEY,
   SUGGESTED_SYSTEM_ONE,
   TURN_LOG_KEY,
+  enabledTabsOf,
   resolveConfig,
   type AgentConfig,
 } from '../../utils/agent-config';
@@ -35,6 +37,7 @@ function el<T extends HTMLElement>(id: string): T {
 const ui = {
   runState: el<HTMLSpanElement>('run-state'),
   togglePause: el<HTMLButtonElement>('toggle-pause'),
+  toggleTab: el<HTMLButtonElement>('toggle-tab'),
   thinking: el<HTMLSpanElement>('thinking'),
   thinkingLabel: el<HTMLSpanElement>('thinking-label'),
   idle: el<HTMLSpanElement>('idle'),
@@ -67,6 +70,8 @@ const dark = browser.devtools.panels.themeName === 'dark';
 document.documentElement.dataset.theme = dark ? 'dark' : 'light';
 
 let paused = false;
+/** the agent is switched on for the inspected tab */
+let onHere = false;
 let turns: TurnRecord[] = [];
 /** the inspected tab's most recent turn */
 let lastHere: TurnRecord | undefined;
@@ -75,16 +80,35 @@ let dirty = false;
 
 // ── run state ────────────────────────────────────────────────────────────────
 
+function renderRunState(): void {
+  const state = !onHere ? 'off' : paused ? 'paused' : 'running';
+  ui.runState.textContent = { off: 'Off', paused: 'Paused', running: 'Running' }[state];
+  ui.runState.dataset.state = state;
+  ui.toggleTab.textContent = onHere ? 'Turn off for this tab' : 'Turn on for this tab';
+  ui.togglePause.textContent = paused ? 'Resume all' : 'Pause all';
+  renderActivity();
+}
+
 function renderPaused(next: boolean): void {
   paused = next;
-  ui.runState.textContent = paused ? 'Paused' : 'Running';
-  ui.runState.dataset.state = paused ? 'paused' : 'running';
-  ui.togglePause.textContent = paused ? 'Resume' : 'Pause';
-  renderActivity();
+  renderRunState();
+}
+
+function setEnabledTabs(stored: unknown): void {
+  onHere = enabledTabsOf(stored).has(inspectedTabId);
+  renderRunState();
 }
 
 ui.togglePause.addEventListener('click', () => {
   void browser.storage.local.set({ [PAUSED_KEY]: !paused });
+});
+
+ui.toggleTab.addEventListener('click', () => {
+  void browser.storage.session.get(ENABLED_TABS_KEY).then((stored) => {
+    const next = enabledTabsOf(stored[ENABLED_TABS_KEY]);
+    if (!next.delete(inspectedTabId)) next.add(inspectedTabId);
+    return browser.storage.session.set({ [ENABLED_TABS_KEY]: [...next] });
+  });
 });
 
 // ── activity: deciding, or idle and why ──────────────────────────────────────
@@ -114,11 +138,11 @@ function renderThinking(): void {
 
 function renderActivity(): void {
   renderThinking();
-  const reason = pendingHere || paused ? undefined : idleReason(lastHere);
+  const reason = pendingHere || paused || !onHere ? undefined : idleReason(lastHere);
   ui.idle.hidden = reason === undefined;
   ui.idle.textContent = reason === undefined ? '' : `Idle: ${reason}`;
   ui.idle.title = reason === undefined ? '' : `${reason} — waiting for the page to change`;
-  ui.decideNow.disabled = paused || pendingHere !== undefined;
+  ui.decideNow.disabled = !onHere || paused || pendingHere !== undefined;
 }
 
 function setPending(stored: unknown): void {
@@ -245,6 +269,7 @@ ui.clearLog.addEventListener('click', () => {
 browser.storage.onChanged.addListener((changes, area) => {
   if (area === 'session') {
     if (PENDING_KEY in changes) setPending(changes[PENDING_KEY].newValue);
+    if (ENABLED_TABS_KEY in changes) setEnabledTabs(changes[ENABLED_TABS_KEY].newValue);
     return;
   }
   if (area !== 'local') return;
@@ -259,7 +284,10 @@ void browser.storage.local.get([CONFIG_KEY, PAUSED_KEY, TURN_LOG_KEY]).then((sto
   setTurns(stored[TURN_LOG_KEY]);
 });
 
-void browser.storage.session.get(PENDING_KEY).then((stored) => setPending(stored[PENDING_KEY]));
+void browser.storage.session.get([PENDING_KEY, ENABLED_TABS_KEY]).then((stored) => {
+  setPending(stored[PENDING_KEY]);
+  setEnabledTabs(stored[ENABLED_TABS_KEY]);
+});
 
 // ── live Scene ───────────────────────────────────────────────────────────────
 

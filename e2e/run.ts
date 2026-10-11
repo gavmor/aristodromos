@@ -32,6 +32,12 @@ declare const chrome: {
       get(key: string): Promise<Record<string, unknown>>;
       set(items: Record<string, unknown>): Promise<void>;
     };
+    session: {
+      set(items: Record<string, unknown>): Promise<void>;
+    };
+  };
+  tabs: {
+    query(filter: { url: string }): Promise<{ id?: number }[]>;
   };
 };
 
@@ -119,6 +125,13 @@ async function main(): Promise<void> {
     console.log(`[e2e] goal: ${GOAL}`);
     console.log(`[e2e] navigating to ${fixture.url}`);
     await page.goto(fixture.url, { waitUntil: 'domcontentloaded' });
+
+    // The agent only runs in tabs it is switched on for: switch on this one,
+    // the way the toolbar button would.
+    await worker.evaluate(async (url) => {
+      const ids = (await chrome.tabs.query({ url })).flatMap((tab) => (tab.id === undefined ? [] : [tab.id]));
+      await chrome.storage.session.set({ enabledTabs: ids });
+    }, fixture.url);
 
     // Converged = the PAGE says so. No polling of agent state.
     const started = Date.now();

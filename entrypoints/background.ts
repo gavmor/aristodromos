@@ -2,11 +2,15 @@
 //
 // One AgentLoop per tab, deciding on the Scene composed from all of that tab's
 // frames; each frame's content script has its own Port. The service worker
-// holds no authoritative state — the Scene replica is rebuilt from the up-edge stream, so
-// an MV3 eviction costs nothing but a reconnect. Control state (goal, brain,
-// pause) lives in `browser.storage.local`; the toolbar button and the devtools
-// panel write it, and this worker follows `storage.onChanged`. A panel that
-// inspects a tab also gets that tab's Scene stream, forwarded as it arrives.
+// holds no authoritative state — the Scene replica is rebuilt from the up-edge
+// stream, so an MV3 eviction costs nothing but a reconnect.
+//
+// A loop only decides in a tab the user switched the agent on for (toolbar
+// button or panel; the set lives in `browser.storage.session`) and while the
+// global pause is off. Everywhere else it still perceives, so the panel can
+// show the Scene, but never acts. Goal, brain and pause live in
+// `browser.storage.local`; this worker follows `storage.onChanged`. A panel
+// that inspects a tab also gets that tab's Scene stream, forwarded as it arrives.
 import { createOllama } from 'ollama-ai-provider-v2';
 import { AgentLoop } from '../utils/agent-loop';
 import { aiSdkBrain, nothingAfforded, type Brain } from '../utils/brain';
@@ -14,9 +18,11 @@ import { createGatedBrain, createSystemOneBrain } from '../utils/system-one-brai
 import {
   CONFIG_KEY,
   DECIDE_NOW_KEY,
+  ENABLED_TABS_KEY,
   PAUSED_KEY,
   PENDING_KEY,
   TURN_LOG_KEY,
+  enabledTabsOf,
   resolveConfig,
   type AgentConfig,
 } from '../utils/agent-config';
@@ -50,9 +56,11 @@ function appendTurn(turn: TurnRecord): void {
   });
 }
 
-async function setBadge(paused: boolean): Promise<void> {
-  await browser.action.setBadgeText({ text: paused ? '⏸' : '▶' });
-  await browser.action.setBadgeBackgroundColor({ color: paused ? '#666666' : '#2e7d32' });
+/** The toolbar badge for one tab: blank when off, ▶ running, ⏸ on but paused. */
+function setBadge(tabId: number, enabled: boolean, paused: boolean): void {
+  // A tab can close between the decision and the call; its badge went with it.
+  void browser.action.setBadgeText({ tabId, text: enabled ? (paused ? '⏸' : '▶') : '' }).catch(() => {});
+  if (enabled) void browser.action.setBadgeBackgroundColor({ tabId, color: paused ? '#666666' : '#2e7d32' }).catch(() => {});
 }
 
 /**
@@ -76,9 +84,12 @@ function brainFor(config: AgentConfig): Brain {
 }
 
 export default defineBackground(() => {
-  // Paused until storage says otherwise: a worker woken after eviction must not
-  // act on a page the user had paused.
+  // Paused, and on nowhere, until storage says otherwise: a worker woken after
+  // eviction must not act on a page the user had paused or never switched on.
   let paused = true;
+  /** The tabs the user switched the agent on for. It runs nowhere else. */
+  let enabled = new Set<number>();
+  const runs = (tabId: number): boolean => !paused && enabled.has(tabId);
   /** One agent per tab: its loop, and the port of each frame composing it. */
   interface TabAgent {
     loop: AgentLoop;
@@ -134,23 +145,39 @@ export default defineBackground(() => {
         publishPending();
       },
     });
-    loop.setPaused(paused);
+    loop.setPaused(!runs(tabId));
     const agent = { loop, ports };
     tabs.set(tabId, agent);
     return agent;
   };
 
-  const applyPaused = (next: boolean): void => {
-    paused = next;
-    for (const { loop } of tabs.values()) loop.setPaused(paused);
-    void setBadge(paused);
-    console.log(`[agent] ${paused ? 'paused' : 'resumed'}`);
+  /** Bring every loop and badge in line with `paused` and `enabled`. */
+  const applyRunState = (): void => {
+    for (const [tabId, { loop }] of tabs) loop.setPaused(!runs(tabId));
+    for (const tabId of enabled) setBadge(tabId, true, paused);
   };
 
-  void browser.storage.local.get(PAUSED_KEY).then((stored) => applyPaused(stored[PAUSED_KEY] === true));
+  const setEnabled = (next: Set<number>): void => {
+    for (const tabId of enabled) if (!next.has(tabId)) setBadge(tabId, false, paused);
+    enabled = next;
+    applyRunState();
+  };
+
+  const writeEnabled = (next: Set<number>): Promise<void> =>
+    browser.storage.session.set({ [ENABLED_TABS_KEY]: [...next] });
+
+  // The global badge of earlier versions; every badge is per tab now.
+  void browser.action.setBadgeText({ text: '' });
+  void Promise.all([browser.storage.local.get(PAUSED_KEY), browser.storage.session.get(ENABLED_TABS_KEY)]).then(
+    ([local, session]) => {
+      paused = local[PAUSED_KEY] === true;
+      setEnabled(enabledTabsOf(session[ENABLED_TABS_KEY]));
+    },
+  );
 
   browser.storage.onChanged.addListener((changes, area) => {
     if (area === 'session') {
+      if (ENABLED_TABS_KEY in changes) setEnabled(enabledTabsOf(changes[ENABLED_TABS_KEY].newValue));
       // "Decide now" from the panel: one fresh decision on that tab's page as it is.
       const request: unknown = changes[DECIDE_NOW_KEY]?.newValue;
       if (request && typeof request === 'object' && 'tabId' in request) {
@@ -159,14 +186,29 @@ export default defineBackground(() => {
       return;
     }
     if (area !== 'local') return;
-    if (PAUSED_KEY in changes) applyPaused(changes[PAUSED_KEY].newValue === true);
+    if (PAUSED_KEY in changes) {
+      paused = changes[PAUSED_KEY].newValue === true;
+      applyRunState();
+      console.log(`[agent] ${paused ? 'paused' : 'resumed'}`);
+    }
     // A new goal or brain is a new task: every connected page decides afresh.
     if (CONFIG_KEY in changes) for (const { loop } of tabs.values()) loop.retarget();
   });
 
-  // ACTION: the toolbar icon is the stop button.
-  browser.action.onClicked.addListener(async () => {
-    await browser.storage.local.set({ [PAUSED_KEY]: !paused });
+  // ACTION: the toolbar icon switches the agent on or off for the tab it is clicked in.
+  browser.action.onClicked.addListener(async (tab) => {
+    if (tab.id === undefined) return;
+    const next = new Set(enabled);
+    if (!next.delete(tab.id)) next.add(tab.id);
+    await writeEnabled(next);
+  });
+
+  // A closed tab's id is gone for good; drop it from the switched-on set.
+  browser.tabs.onRemoved.addListener((tabId) => {
+    if (!enabled.has(tabId)) return;
+    const next = new Set(enabled);
+    next.delete(tabId);
+    void writeEnabled(next);
   });
 
   browser.runtime.onConnect.addListener((port) => {
