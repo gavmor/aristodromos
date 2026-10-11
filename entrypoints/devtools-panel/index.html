@@ -56,6 +56,15 @@
           <label>Threshold <input id="so-threshold" type="number" min="0" max="1" step="0.05" required /></label>
         </div>
       </fieldset>
+      <fieldset id="tr-fields">
+        <legend>
+          <label class="inline"><input id="tr-enabled" type="checkbox" /> Trace each decision (OTLP, e.g. Phoenix)</label>
+        </legend>
+        <div class="row">
+          <label>Traces endpoint <input id="tr-endpoint" type="url" required /></label>
+          <label>Project <input id="tr-project" required /></label>
+        </div>
+      </fieldset>
       <div class="actions">
         <button type="submit">Save and run</button>
         <span id="save-note" class="muted"></span>

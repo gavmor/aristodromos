@@ -99,19 +99,19 @@ async function main(): Promise<void> {
     console.log(`[e2e] extension service worker up: ${worker.url()}`);
 
     // Set the goal the way a user would: through the extension's own storage.
-    await worker.evaluate(
-      async ([goal, model, baseURL]) => {
-        await chrome.storage.local.set({
-          agentConfig: { goal, model, baseURL },
-          turnLog: [],
-        });
-      },
-      [
-        GOAL,
-        process.env.OLLAMA_MODEL ?? 'qwen3-coder-ud-q4kxl:latest',
-        process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434/api',
-      ],
-    );
+    // PHOENIX_COLLECTOR_ENDPOINT (e.g. http://localhost:6006/v1/traces) also
+    // traces every decision of the run into the `aristodromos-e2e` project.
+    const collector = process.env.PHOENIX_COLLECTOR_ENDPOINT;
+    const agentConfig = {
+      goal: GOAL,
+      model: process.env.OLLAMA_MODEL ?? 'qwen3-coder-ud-q4kxl:latest',
+      baseURL: process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434/api',
+      ...(collector ? { tracing: { endpoint: collector, project: 'aristodromos-e2e' } } : {}),
+    };
+    await worker.evaluate(async (config) => {
+      await chrome.storage.local.set({ agentConfig: config, turnLog: [] });
+    }, agentConfig);
+    if (collector) console.log(`[e2e] tracing to ${collector} (project aristodromos-e2e)`);
 
     const page = await context.newPage();
     page.on('console', (message) => {

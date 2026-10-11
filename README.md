@@ -267,6 +267,11 @@ e2e/
 - Chromium at `/usr/bin/chromium` for `pnpm e2e` (override with `CHROMIUM_PATH`)
 - *Optional*, for the System One path: any server speaking `POST /v1/systemone`.
   Point `pnpm probe` at it with `JEV_BASE_URL` / `JEV_MODEL`.
+- *Optional*, for tracing: any OTLP/HTTP (protobuf) collector; Arize Phoenix is
+  the intended one (`docker run -p 6006:6006 arizephoenix/phoenix`, or
+  `pip install arize-phoenix && phoenix serve`). Set
+  `PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006/v1/traces` and `pnpm e2e`
+  traces its decisions into the `aristodromos-e2e` project.
 
 ## Setting a goal
 
@@ -283,8 +288,8 @@ closed tab drops out.
 
 The **Aristodromos** tab in DevTools is the control surface: the switch for this
 tab, a global pause/resume, the goal, the Ollama model and base URL, the
-optional System One gate, and a live turn log for the inspected tab (or all
-tabs). **Save and run** applies the config to every tab the agent is on for, with
+optional System One gate, optional tracing, and a live turn log for the inspected
+tab (or all tabs). **Save and run** applies the config to every tab the agent is on for, with
 a fresh tick budget, without waiting for the page to change. While the inspected
 tab's decision is waiting on the
 brain, a spinner and elapsed timer show in the panel header; the background
@@ -317,6 +322,13 @@ chrome.storage.local.set({
       model: 'autojev',
       threshold: 0.6,
     },
+
+    // Optional. Omit it and nothing is traced. Present, and every brain call
+    // is sent as an OpenInference trace to this OTLP endpoint.
+    tracing: {
+      endpoint: 'http://localhost:6006/v1/traces',
+      project: 'aristodromos',
+    },
   },
 });
 ```
@@ -333,6 +345,23 @@ reconnects on restore. If the old worker had already gone idle on that exact
 Scene, the snapshot is marked `settled`, and the new worker does not ask the
 model about it again. Reloading the extension itself is different: the content
 scripts already in open tabs are orphaned, so reload those tabs afterwards.
+
+### Tracing decisions
+
+With `tracing` set, each `generateObject` call is exported as an OpenTelemetry
+trace, enriched by `@arizeai/openinference-vercel` so Phoenix reads it as an
+`AGENT` span over an `LLM` span. The trace holds the system prompt, the goal and
+outline the model saw, the plan it returned, the model, and token counts: the
+place to look when a choice is wrong.
+
+The integration is passed to each call (`telemetry.integrations`), never
+registered globally, so it follows the stored config like the brain does:
+switched on, off, or re-pointed without restarting the worker. A service worker
+has no context manager, which is fine, since the AI SDK passes each child span's
+parent explicitly, and it can be evicted at any idle moment, so each span is
+exported as it ends rather than batched. The OTLP exporter's browser build sends
+with `fetch`; the extension's host permissions cover the collector, so Phoenix
+needs no CORS setup. The System One classifier is not traced.
 
 ## Evidence
 
