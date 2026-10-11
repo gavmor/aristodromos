@@ -1,4 +1,4 @@
-import { computeAccessibleName, getRole } from 'dom-accessibility-api';
+import { computeAccessibleName, getRole, isInaccessible } from 'dom-accessibility-api';
 import { roles as ariaRoles } from 'aria-query';
 import {
   ActionNode,
@@ -78,34 +78,35 @@ export function classifyCategory(role: string, el: Element): NodeCategory {
 
 /**
  * Rendered and seen: not `display: none`, `visibility: hidden` or
- * `content-visibility: hidden`, and not transparent, by itself or by any
- * ancestor. A closed dialog left at `opacity: 0` hides every button in it.
+ * `content-visibility: hidden`, not transparent, and not `aria-hidden`, by
+ * itself or by any ancestor. A closed dialog left at `opacity: 0` hides every
+ * button in it; so does a container the page marked `aria-hidden="true"`.
  *
  * A control's OWN opacity is the one exception (`control`): a custom checkbox
  * or radio is very often a real <input> at opacity 0 under a styled label, and
  * that input is exactly what actuation drives.
  */
 export function isVisible(el: Element, control = false): boolean {
-  if (el.getAttribute('aria-hidden') === 'true') return false;
+  // `checkVisibility()` knows nothing of ARIA; an aria-hidden ancestor hides the
+  // subtree in both paths below, so tests and the browser agree.
+  if (el.closest('[aria-hidden="true"]')) return false;
   // The element's own style is not enough: a hidden ancestor hides it just the
   // same, and a shallow check reports a ghost the model clicks forever.
+  const opaqueFrom = control ? el.parentElement : el;
   if (typeof el.checkVisibility === 'function') {
     if (!el.checkVisibility({ visibilityProperty: true })) return false;
-    const opaqueFrom = control ? el.parentElement : el;
     return opaqueFrom ? opaqueFrom.checkVisibility({ opacityProperty: true }) : true;
   }
-  // Engines without checkVisibility (jsdom): walk the ancestors the same way.
+  // Engines without checkVisibility (jsdom): the accessibility tree's own
+  // exclusion test (hidden, display, visibility: hidden, ancestors included),
+  // plus what it leaves out: `visibility: collapse` and opacity.
   const view = el.ownerDocument.defaultView;
   if (!view) return true;
-  for (let cur: Element | null = el; cur; cur = cur.parentElement) {
-    if ((cur as HTMLElement).hidden) return false;
-    const style = view.getComputedStyle(cur);
-    if (style.display === 'none') return false;
-    if (style.opacity === '0' && !(control && cur === el)) return false;
+  if (isInaccessible(el) || view.getComputedStyle(el).visibility === 'collapse') return false;
+  for (let cur = opaqueFrom; cur; cur = cur.parentElement) {
+    if (view.getComputedStyle(cur).opacity === '0') return false;
   }
-  // `visibility` inherits, so the element's own computed value already counts its ancestors.
-  const visibility = view.getComputedStyle(el).visibility;
-  return visibility !== 'hidden' && visibility !== 'collapse';
+  return true;
 }
 
 export function isDisabled(el: Element): boolean {

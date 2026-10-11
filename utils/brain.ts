@@ -16,7 +16,7 @@
 // memoryless, and it EMITS intent rather than performing it — the content script
 // still owns actuation, which is what keeps the loop safe to retry.
 import { generateObject, type LanguageModel } from 'ai';
-import { buildActionSchema, type Plan, type PlanAction } from './action-schema';
+import { buildActionSchema, isScriptHref, type Plan, type PlanAction } from './action-schema';
 import type { ContentNode, NodeId, Scene, SceneNode } from './scene';
 
 /**
@@ -78,6 +78,17 @@ function flags(node: SceneNode): string {
  */
 const PAGE_TEXT_BUDGET = 6000;
 const TEXT_PER_BLOCK = 1500;
+
+/**
+ * Where a link goes, so the model can tell "next chapter" from a link off the
+ * page entirely. Long addresses (tracking parameters, data: URLs) are cut: the
+ * start says where, the rest only costs tokens.
+ */
+const HREF_MAX = 100;
+const destination = (href: string | undefined): string => {
+  if (!href || isScriptHref(href)) return '';
+  return ` <${href.length > HREF_MAX ? `${href.slice(0, HREF_MAX)}…` : href}>`;
+};
 
 const quoted = (text: string | undefined): string => (text ? ` ${JSON.stringify(text)}` : '');
 
@@ -158,7 +169,7 @@ export function describeScene(scene: Scene): string {
           node.expanded === undefined ? null : node.expanded ? 'expanded' : 'collapsed',
           node.pressed === undefined ? null : node.pressed ? 'pressed' : 'not pressed',
         ].filter(Boolean);
-        return `${id}(${node.role})${quoted(node.name)}${state.length ? ` (${state.join(', ')})` : ''}${flags(node)}`;
+        return `${id}(${node.role})${quoted(node.name)}${destination(node.href)}${state.length ? ` (${state.join(', ')})` : ''}${flags(node)}`;
       }
       case 'content': {
         const text = textOf.get(node.id);

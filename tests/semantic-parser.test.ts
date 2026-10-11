@@ -82,6 +82,11 @@ describe('parseNode', () => {
     expect(parseNode(first('input'), ctx)?.perception.visible).toBe(true);
   });
 
+  it('hides what an aria-hidden container holds', () => {
+    document.body.innerHTML = '<div aria-hidden="true"><button>Behind the modal</button></div>';
+    expect(parseNode(first('button'), ctx)?.perception.visible).toBe(false);
+  });
+
   it('reports disabled in local perception', () => {
     document.body.innerHTML = '<button disabled>Pay</button>';
     const node = parseNode(first('button'), ctx);

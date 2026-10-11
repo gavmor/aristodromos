@@ -128,6 +128,16 @@ describe('describeScene', () => {
     expect(text).toMatch(/\(link\) "Shown"/);
   });
 
+  it('says where a link goes, cutting long addresses and skipping script', () => {
+    const long = `https://ads.example/track?${'x'.repeat(200)}`;
+    const text = outlineOf(
+      `<a href="/chapter-2">Next</a><a href="${long}">Games like this</a><a href="javascript:void(0)" onclick="go()">Go</a>`,
+    );
+    expect(text).toMatch(/\(link\) "Next" <\/chapter-2>/);
+    expect(text).toContain(`"Games like this" <${long.slice(0, 100)}…>`);
+    expect(text).toMatch(/\(link\) "Go"(?! <)/);
+  });
+
   it('neither lists nor lets the model name a control its container hides', () => {
     document.body.innerHTML = '<div id="section16" style="display:none"><button>Confirm</button></div><button>Continue</button>';
     const snapshot = new SceneProjector({ root: document, emit: () => {}, schedule: () => {} }).scan();

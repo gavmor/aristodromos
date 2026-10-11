@@ -74,11 +74,15 @@ order:
 A value sits beside its label, a choice under the passage it answers. Only lines
 the schema can name carry an `[id]`; disabled controls are still shown, flagged,
 without one. Unnamed wrappers are dropped and a row of plain cells reads as one
-line.
+line. A link shows where it goes (`(link) "Next" </chapter-2>`), cut at 100
+characters; a `javascript:` link shows none.
 
 Visibility is the browser's own (`Element.checkVisibility()`), not the element's
-own CSS: a control inside a `display: none` or `opacity: 0` container is not
-seen, so it is neither shown nor nameable. A control's *own* opacity is the one
+own CSS: a control inside a `display: none`, `opacity: 0` or `aria-hidden="true"`
+container is not seen, so it is neither shown nor nameable. (`checkVisibility()`
+ignores ARIA, so the `aria-hidden` ancestor is checked alongside it; under jsdom,
+which lacks `checkVisibility()`, `isInaccessible` from `dom-accessibility-api`
+stands in, plus the opacity walk.) A control's *own* opacity is the one
 exception — custom checkboxes are real inputs at opacity 0. Because CSS can show
 or hide things with no record on the element itself (a flag on `<html>`, a
 stylesheet, an animation ending), any attribute change anywhere, a stylesheet

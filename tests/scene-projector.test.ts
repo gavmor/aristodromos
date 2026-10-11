@@ -169,6 +169,21 @@ describe('SceneProjector.flush', () => {
     expect(confirm().perception.visible).toBe(true);
   });
 
+  it('hides what a container holds when the page aria-hides the container', async () => {
+    document.body.innerHTML = '<div id="carousel"><button>Next slide</button></div>';
+    const { proj } = makeProjector();
+    proj.scan();
+    const next = () => Object.values(proj.current.nodes).find((n) => n.name === 'Next slide')!;
+    expect(next().perception.visible).toBe(true);
+
+    proj.start();
+    document.getElementById('carousel')!.setAttribute('aria-hidden', 'true'); // a change on the container only
+    await Promise.resolve(); // MutationObserver delivers in the microtask queued by the change
+    proj.flush();
+    proj.stop();
+    expect(next().perception.visible).toBe(false);
+  });
+
   it('carries a text edit inside an inline wrapper to the block that reads it', async () => {
     document.body.innerHTML = '<div class="passage">Your gold is <b id="gold">10</b> coins.</div>';
     const { proj } = makeProjector();

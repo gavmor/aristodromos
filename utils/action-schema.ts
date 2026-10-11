@@ -73,8 +73,11 @@ export const isActionNode = (n: SceneNode): n is ActionNode => n.category === 'a
  */
 export function isReachable(node: SceneNode): boolean {
   if (node.perception.disabled || node.perception.inertByModal || !node.perception.visible) return false;
-  return !(isActionNode(node) && node.href?.trim().toLowerCase().startsWith('javascript:'));
+  return !(isActionNode(node) && node.href !== undefined && isScriptHref(node.href));
 }
+
+/** A `javascript:` URL: script to run, not a place to go. */
+export const isScriptHref = (href: string): boolean => href.trim().toLowerCase().startsWith('javascript:');
 
 /** The value type a particular state node will accept. */
 type ValueShape =
