@@ -34,6 +34,22 @@ describe('SceneProjector.scan', () => {
   });
 });
 
+describe('SceneProjector placement', () => {
+  it('places every node under its nearest projected ancestor, in sibling order', () => {
+    document.body.innerHTML = '<main><h1>Status</h1><div><p>Hull holding.</p><p>Air thin.</p></div></main>';
+    const { proj } = makeProjector();
+    const nodes = Object.values(proj.scan().kind === 'snapshot' ? proj.current.nodes : {});
+    const byText = (text: string) => nodes.find((n) => 'text' in n && n.text === text)!;
+    const main = nodes.find((n) => n.role === 'main')!;
+    // the <div> is an unprojected wrapper: the paragraphs belong to <main>
+    expect([byText('Status'), byText('Hull holding.'), byText('Air thin.')].map((n) => [n.parent, n.order])).toEqual([
+      [main.id, 0],
+      [main.id, 1],
+      [main.id, 2],
+    ]);
+  });
+});
+
 describe('SceneProjector.flush', () => {
   it('emits an add op for a newly dirtied element', () => {
     document.body.innerHTML = '<button>Go</button>';
@@ -97,7 +113,7 @@ describe('SceneProjector.flush', () => {
 
     const roles = Object.values(proj.current.nodes).map((n) => n.role);
     expect(roles).toEqual(expect.arrayContaining(['paragraph', 'radio', 'link']));
-    expect(onlyPatch(patches).ops.filter((o) => o.op === 'add')).toHaveLength(3);
+    expect(onlyPatch(patches).ops.filter((o) => o.op === 'add' && /^\/nodes\/[^/]+$/.test(o.path))).toHaveLength(3);
   });
 
   it('drops everything inside a subtree removed in one go', async () => {
@@ -113,5 +129,28 @@ describe('SceneProjector.flush', () => {
     expect(Object.values(proj.current.nodes).map((n) => n.role)).not.toEqual(expect.arrayContaining(['paragraph']));
     expect(Object.values(proj.current.nodes).some((n) => n.role === 'link')).toBe(false);
     expect(onlyPatch(patches).ops.filter((o) => o.op === 'remove')).toHaveLength(2);
+  });
+
+  it('renumbers only the siblings after an insertion, and places the newcomer', async () => {
+    document.body.innerHTML = '<h1>Crew</h1><ul><li>Ada</li><li>Grace</li><li>Katherine</li></ul>';
+    const { proj, patches } = makeProjector();
+    proj.scan();
+    proj.start();
+    const items = Array.from(document.querySelectorAll('li'));
+    const [ada, grace, katherine] = items.map((li) => Object.values(proj.current.nodes).find((n) => proj.elementFor(n.id) === li)!.id);
+    const newcomer = document.createElement('li');
+    newcomer.textContent = 'Margaret';
+    items[1].before(newcomer);
+    await Promise.resolve(); // MutationObserver delivers in the microtask queued by the insertion
+    proj.flush();
+    proj.stop();
+
+    const orderOps = onlyPatch(patches).ops.filter((o) => o.path.endsWith('/order')).map((o) => o.path);
+    expect(orderOps).toEqual(expect.arrayContaining([`/nodes/${grace}/order`, `/nodes/${katherine}/order`]));
+    expect(orderOps).not.toContain(`/nodes/${ada}/order`);
+    const placed = Object.values(proj.current.nodes).find((n) => proj.elementFor(n.id) === newcomer)!;
+    expect(placed.order).toBe(1);
+    expect(placed.parent).toBe(proj.current.nodes[ada].parent);
+    expect(proj.current.nodes[katherine].order).toBe(3);
   });
 });

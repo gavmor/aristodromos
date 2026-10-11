@@ -49,8 +49,33 @@ into its own replica and composes them into the one Scene the brain sees, with
 node ids namespaced by frame (`f0.n12` is the top document's, `f14.n3` is an
 iframe's). A plan's actions route back to their frames by that prefix, in each
 frame's own ids. Frames under 100×100 (tracking pixels, hidden iframes) are left
-out. The observation lists what is on screen first, so a page wrapped around an
-embedded frame (a store page around a game) does not bury the frame.
+out, and each composed frame hangs under the `<iframe>` that embeds it, so it
+reads where the page shows it.
+
+## What the model reads
+
+The Scene is a flat, id-keyed map because that is what patches cheaply and what
+the schema's enums are built from. It is not what the model reads. Every node
+also records its `parent` (nearest projected ancestor) and `order` (position
+among its siblings — sibling-local, so an insertion renumbers only the siblings
+after it), and `describeScene` renders that as an indented outline in reading
+order:
+
+```
+(heading 2) "Status"
+(table)
+  (row) Atmosphere: | 100%
+  (row) Hull: | 40%
+(paragraph) "Something scrapes against the hull."
+[n12] (button) "Seal the airlock"
+[n13] (button) "Vent the bay"
+```
+
+A value sits beside its label, a choice under the passage it answers. Only lines
+the schema can name carry an `[id]`; disabled controls are still shown, flagged,
+without one. Unnamed wrappers are dropped, a row of plain cells reads as one line,
+and structure or prose the page hides is left out. Page text is shown whole under
+one overall budget, spent on what is on screen first.
 
 There are no watermarks, acks or sequence numbers. The loop is **at-least-once
 and memoryless**, and it closes **through the world**: the reconciler applies a
@@ -184,7 +209,7 @@ utils/
 ├── node-identity.ts    # stable NodeIds (mirror + semantic re-key), reverse lookup
 ├── actuation.ts        # per-node actuation recipes (react-setter, pointer sequence)
 ├── action-schema.ts    # Scene → discriminated-union zod schema
-├── brain.ts            # Scene + goal → Plan, via AI SDK generateObject
+├── brain.ts            # Scene + goal → Plan via AI SDK generateObject; describeScene's outline
 ├── system-one.ts       # typed POST /v1/systemone client (provider-agnostic)
 ├── system-one-questions.ts # Scene → choice questions; slug ↔ (verb, nodeId)
 ├── system-one-brain.ts # the System One brain + the confidence gate

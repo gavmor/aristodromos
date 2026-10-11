@@ -28,6 +28,8 @@ interface NodeBase {
   name?: string;
   relations: Relations;
   perception: Perception;
+  /** 0 until the projector places the node among its siblings */
+  order: number;
 }
 
 const STATE_ROLES = new Set([
@@ -41,7 +43,7 @@ const ACTION_ROLES = new Set([
 const STRUCTURE_ROLES = new Set([
   'form', 'search', 'dialog', 'alertdialog', 'navigation', 'main', 'region',
   'complementary', 'banner', 'contentinfo', 'list', 'group', 'tablist',
-  'table', 'grid', 'menu', 'menubar', 'tree', 'toolbar', 'radiogroup',
+  'table', 'grid', 'menu', 'menubar', 'tree', 'toolbar', 'radiogroup', 'iframe',
 ]);
 const CONTENT_ROLES = new Set([
   'heading', 'img', 'status', 'alert', 'log', 'note', 'paragraph',
@@ -296,6 +298,7 @@ function buildStructureNode(el: Element, base: NodeBase, role: string): Structur
     const action = el.getAttribute('action');
     if (action !== null) node.actionUrl = action;
   }
+  if (el.tagName.toLowerCase() === 'iframe') node.frameSrc = (el as HTMLIFrameElement).src;
   return prune(node);
 }
 
@@ -315,8 +318,11 @@ const ROLELESS_TEXT_INPUTS = new Set([
  * Implicit roles the HTML-AAM assigns that `dom-accessibility-api`'s tag table
  * lacks. Without `p`, every paragraph of prose on a page was dropped, so the
  * brain saw a story's choices but never the story.
+ *
+ * `iframe` has no ARIA role at all; it is projected under its own name so the
+ * tab's outline can show an embedded frame where it sits in its parent page.
  */
-const MISSING_IMPLICIT_ROLES: Record<string, string> = { p: 'paragraph' };
+const MISSING_IMPLICIT_ROLES: Record<string, string> = { p: 'paragraph', iframe: 'iframe' };
 
 export function resolveRole(el: Element): string | null {
   const role = getRole(el);
@@ -341,6 +347,7 @@ export function parseNode(el: Element, ctx: ParseContext): SceneNode | null {
     name,
     relations: parseRelations(el, ctx),
     perception: parseLocalPerception(el),
+    order: 0,
   });
   switch (classifyCategory(role, el)) {
     case 'state': return buildStateNode(el, base, role);

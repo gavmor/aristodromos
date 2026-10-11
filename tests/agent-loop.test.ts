@@ -23,6 +23,7 @@ const field = (id: string, value = ''): StateNode => ({
   relations: {},
   perception,
   actuation: { setStrategy: 'react-setter' },
+  order: 0,
 });
 
 const sceneWith = (documentId: string, ...nodes: SceneNode[]): Scene => ({

@@ -121,6 +121,6 @@ describe('describeState', () => {
     expect(state).toContain('goal: Sign in as alice@example.com');
     expect(state).toContain('Email address');
     // disabled nodes stay DESCRIBED even though they are not nameable as options
-    expect(state).toContain('DISABLED');
+    expect(state).toContain('[disabled]');
   });
 });

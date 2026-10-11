@@ -21,6 +21,7 @@ const stateNode = (over: Partial<StateNode> & { id: string }): StateNode => ({
   relations: {},
   perception: perception(),
   actuation: { setStrategy: 'react-setter', events: ['input', 'change'] },
+  order: 0,
   ...over,
 });
 
@@ -31,6 +32,7 @@ const actionNode = (over: Partial<ActionNode> & { id: string }): ActionNode => (
   relations: {},
   perception: perception(),
   actuation: { fireStrategy: 'pointer-sequence' },
+  order: 0,
   ...over,
 });
 

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { MIN_FRAME_SIDE, TabScene, splitNodeId } from '../utils/tab-scene';
-import type { ActionNode, Scene, StateNode } from '../utils/scene';
-import { actionNode, stateNode } from './fixtures/scene';
+import type { ActionNode, Scene, SceneNode, StateNode, StructureNode } from '../utils/scene';
+import { actionNode, perception, stateNode } from './fixtures/scene';
 
 const frameScene = (
   documentId: string,
-  nodes: (StateNode | ActionNode)[],
+  nodes: SceneNode[],
   over: Partial<Scene> = {},
 ): Scene => ({
   documentId,
@@ -85,5 +85,20 @@ describe('TabScene', () => {
     expect(tab.settled).toBe(true);
     tab.ingest(0, { kind: 'patch', documentId: 'top', ops: [{ op: 'replace', path: '/title', value: 'moved' }] });
     expect(tab.settled).toBe(false);
+  });
+
+  it('hangs a child frame under the iframe that embeds it; a frame with no host stays on top', () => {
+    const host: StructureNode = {
+      id: 'n5', role: 'iframe', category: 'structure', frameSrc: 'https://game.test/#start', relations: {}, perception: perception(), order: 0,
+    };
+    const tab = new TabScene();
+    tab.ingest(0, { kind: 'snapshot', scene: frameScene('top', [host]) });
+    tab.ingest(4, { kind: 'snapshot', scene: frameScene('game', [actionNode({ id: 'n1' }), actionNode({ id: 'n2', parent: 'n1' })]) });
+    tab.ingest(9, { kind: 'snapshot', scene: frameScene('ad', [actionNode({ id: 'n1' })]) });
+
+    const nodes = tab.current!.nodes;
+    expect(nodes['f4.n1'].parent).toBe('f0.n5'); // the game's top, under its iframe (fragment ignored)
+    expect(nodes['f4.n2'].parent).toBe('f4.n1'); // its own outline, re-keyed
+    expect(nodes['f9.n1'].parent).toBeUndefined(); // no iframe embeds the ad's URL
   });
 });

@@ -32,8 +32,34 @@ function rekey(frameId: number, node: SceneNode): SceneNode {
     Object.entries(node.relations).map(([key, value]) => [key, Array.isArray(value) ? value.map(at) : at(value)]),
   ) as Relations;
   const copy = { ...node, id: at(node.id), relations };
+  if (copy.parent !== undefined) copy.parent = at(copy.parent);
   if ('submits' in copy && copy.submits) copy.submits = { ...copy.submits, formId: at(copy.submits.formId) };
   return copy;
+}
+
+/** The same document, give or take a fragment. */
+const sameDocument = (a: string, b: string): boolean => a.split('#')[0] === b.split('#')[0];
+
+/**
+ * Hang each child frame's top-level nodes under the `<iframe>` that embeds
+ * it, so the outline reads the frame where the page shows it. Matched by URL,
+ * each host used once; a frame with no matching host (it navigated away from
+ * its `src`, say) stays top-level and reads after the page.
+ */
+function nestFrames(included: [number, Scene][], nodes: Record<NodeId, SceneNode>): void {
+  const hosts = Object.values(nodes).filter((n) => n.category === 'structure' && n.frameSrc);
+  const used = new Set<NodeId>();
+  for (const [frameId, scene] of included) {
+    const own = `f${frameId}.`;
+    const host = hosts.find(
+      (h) => !used.has(h.id) && !h.id.startsWith(own) && h.category === 'structure' && sameDocument(h.frameSrc ?? '', scene.url),
+    );
+    if (!host) continue;
+    used.add(host.id);
+    for (const node of Object.values(nodes)) {
+      if (node.id.startsWith(own) && node.parent === undefined) node.parent = host.id;
+    }
+  }
 }
 
 export class TabScene {
@@ -104,6 +130,7 @@ export class TabScene {
         nodes[rekeyed.id] = rekeyed;
       }
     }
+    nestFrames(included, nodes);
     return {
       // Any frame showing a new document is a new world for the whole tab.
       documentId: included.map(([, scene]) => scene.documentId).join('+'),

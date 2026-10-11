@@ -40,6 +40,8 @@ export class SceneProjector {
   private scene: Scene;
   private mirror = new NodeIdMirror();
   private dirty = new Set<Element>();
+  /** elements whose children were inserted or removed: their outline needs re-placing */
+  private childListTargets = new Set<Element>();
   private globalPerception = new Map<string, GlobalPerception>();
   private scheduled = false;
   private lastFocused: Element | null = null;
@@ -85,6 +87,12 @@ export class SceneProjector {
       const node = parseNode(el, ctx);
       if (node) this.scene.nodes[node.id] = node;
     }
+    // Every element is visited once: by the place() of its nearest projected ancestor.
+    this.place(null);
+    for (const id of Object.keys(this.scene.nodes)) {
+      const el = this.mirror.elementFor(id);
+      if (el) this.place(el);
+    }
     return { kind: 'snapshot', scene: this.scene };
   }
 
@@ -115,6 +123,11 @@ export class SceneProjector {
     this.scheduled = false;
     const ctx: ParseContext = { mirror: this.mirror };
     const ops: Operation[] = [];
+    // Parents whose list of projected children may have changed; null is the frame's top.
+    const reflow = new Set<Element | null>();
+    for (const target of this.childListTargets) if (target.isConnected) reflow.add(this.selfOrAncestor(target));
+    this.childListTargets.clear();
+    const placementChanged: Element[] = [];
 
     for (const el of this.dirty) {
       const node = el.isConnected ? parseNode(el, ctx) : null;
@@ -126,6 +139,8 @@ export class SceneProjector {
         if (prev) {
           delete this.scene.nodes[id];
           ops.push({ op: 'remove', path: `/nodes/${id}` });
+          // Still on the page but no longer projected: its children move up a level.
+          if (el.isConnected) placementChanged.push(el);
         }
         continue;
       }
@@ -136,16 +151,84 @@ export class SceneProjector {
       if (!prev) {
         this.scene.nodes[id] = node;
         ops.push({ op: 'add', path: `/nodes/${id}`, value: node });
+        placementChanged.push(el);
         continue;
       }
+      // Parsing knows nothing of placement: keep it, and let place() change it.
+      node.order = prev.order;
+      if (prev.parent !== undefined) node.parent = prev.parent;
       for (const sub of compare(prev, node)) {
         ops.push({ ...sub, path: `/nodes/${id}${sub.path}` });
       }
       this.scene.nodes[id] = node;
     }
-
     this.dirty.clear();
+
+    // A node that appeared or vanished changes its ancestor's children, and a
+    // newly projected one may adopt nodes that sat directly under that ancestor.
+    for (const el of placementChanged) {
+      reflow.add(this.projectedAncestor(el));
+      if (this.isProjected(el)) reflow.add(el);
+    }
+    for (const parent of reflow) this.place(parent, ops);
+
     if (ops.length) this.deps.emit({ kind: 'patch', documentId: this.scene.documentId, ops });
+  }
+
+  private isProjected(el: Element): boolean {
+    const id = this.mirror.peek(el);
+    return id !== undefined && this.scene.nodes[id] !== undefined;
+  }
+
+  private projectedAncestor(el: Element): Element | null {
+    for (let cur = el.parentElement; cur; cur = cur.parentElement) if (this.isProjected(cur)) return cur;
+    return null;
+  }
+
+  private selfOrAncestor(el: Element): Element | null {
+    return this.isProjected(el) ? el : this.projectedAncestor(el);
+  }
+
+  /** The projected elements directly under `parent` (null: the frame's top), in document order. */
+  private projectedChildren(parent: Element | null): Element[] {
+    const found: Element[] = [];
+    const visit = (el: Element): void => {
+      for (const child of Array.from(el.children)) {
+        if (this.isProjected(child)) found.push(child);
+        else visit(child); // an unprojected wrapper is transparent
+      }
+    };
+    if (parent) visit(parent);
+    else {
+      const top = this.deps.root.documentElement;
+      if (top && this.isProjected(top)) found.push(top);
+      else if (top) visit(top);
+    }
+    return found;
+  }
+
+  /** Give each child of `parent` its parent id and sibling position, recording what changed. */
+  private place(parent: Element | null, ops?: Operation[]): void {
+    const parentId = parent ? this.mirror.peek(parent) : undefined;
+    // No longer projected: its ancestor is being re-placed instead.
+    if (parent && !this.isProjected(parent)) return;
+    this.projectedChildren(parent).forEach((child, order) => {
+      const id = this.mirror.peek(child);
+      if (!id) return;
+      const node = this.scene.nodes[id];
+      if (node.order !== order) {
+        node.order = order;
+        ops?.push({ op: 'replace', path: `/nodes/${id}/order`, value: order });
+      }
+      if (node.parent === parentId) return;
+      if (parentId === undefined) {
+        delete node.parent;
+        ops?.push({ op: 'remove', path: `/nodes/${id}/parent` });
+      } else {
+        ops?.push({ op: node.parent === undefined ? 'add' : 'replace', path: `/nodes/${id}/parent`, value: parentId });
+        node.parent = parentId;
+      }
+    });
   }
 
   /** Wire the live sources. Each is guarded for API availability (jsdom etc.). */
@@ -230,6 +313,7 @@ export class SceneProjector {
     let modalChanged = false;
     for (const rec of records) {
       if (rec.target instanceof Element) this.markDirty(rec.target);
+      if (rec.type === 'childList' && rec.target instanceof Element) this.childListTargets.add(rec.target);
       // A record names only the ROOT of an added or removed subtree. Pages that
       // render a whole section at once (a story passage, a framework re-render)
       // put everything that matters below it, so walk it.

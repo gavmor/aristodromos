@@ -107,6 +107,18 @@ interface BaseNode {
   category: NodeCategory;
   relations: Relations;
   perception: Perception;
+  /**
+   * The nearest projected ancestor; absent at the top of a frame. Together
+   * with `order` this is the page's outline, which is what gives a node its
+   * context: the row a value sits in, the passage a choice follows.
+   */
+  parent?: NodeId;
+  /**
+   * Position among the parent's projected children, in document order.
+   * Sibling-local on purpose: inserting a node renumbers only its later
+   * siblings, so one DOM change stays one small patch.
+   */
+  order: number;
 }
 
 /** Convergent: has a settable value. Re-applying the same target is a no-op. */
@@ -173,6 +185,8 @@ export interface StructureNode extends BaseNode {
   /** for forms */
   method?: 'get' | 'post';
   actionUrl?: string;
+  /** for an iframe: the document it embeds, to place that frame in the tab's outline */
+  frameSrc?: string;
 }
 
 export type SceneNode = StateNode | ActionNode | ContentNode | StructureNode;

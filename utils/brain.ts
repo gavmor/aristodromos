@@ -16,8 +16,8 @@
 // memoryless, and it EMITS intent rather than performing it — the content script
 // still owns actuation, which is what keeps the loop safe to retry.
 import { generateObject, type LanguageModel } from 'ai';
-import { buildActionSchema, isActionNode, isStateNode, type Plan, type PlanAction } from './action-schema';
-import type { ContentNode, Scene } from './scene';
+import { buildActionSchema, type Plan, type PlanAction } from './action-schema';
+import type { ContentNode, NodeId, Scene, SceneNode } from './scene';
 
 /**
  * The loop's view of one decision. `actions` is empty only in named cases:
@@ -62,13 +62,13 @@ export const nothingAfforded = (via: string): Decision => ({
   actions: [],
 });
 
-function flags(node: { perception: { disabled: boolean; visible: boolean; inertByModal: boolean } }): string {
+function flags(node: SceneNode): string {
   const set = [
-    node.perception.disabled ? 'DISABLED' : null,
-    node.perception.visible ? null : 'NOT-VISIBLE',
-    node.perception.inertByModal ? 'BEHIND-MODAL' : null,
+    node.perception.disabled ? 'disabled' : null,
+    node.perception.visible ? null : 'hidden',
+    node.perception.inertByModal ? 'behind modal' : null,
   ].filter(Boolean);
-  return set.length ? ` [${set.join(',')}]` : '';
+  return set.length ? ` [${set.join(', ')}]` : '';
 }
 
 /**
@@ -78,51 +78,57 @@ function flags(node: { perception: { disabled: boolean; visible: boolean; inertB
  */
 const PAGE_TEXT_BUDGET = 6000;
 
+const quoted = (text: string | undefined): string => (text ? ` ${JSON.stringify(text)}` : '');
+
+/** Unnamed, these only wrap: their children read at their level. */
+const WRAPPER_ROLES = new Set(['document', 'rowgroup']);
+/** A table with one row is still a table. */
+const TABULAR_ROLES = new Set(['table', 'grid']);
+
 /**
- * Flatten the Scene into the smallest text sufficient to choose a node.
- * Unreachable nodes are still DESCRIBED — "Submit exists but is disabled" is the
- * signal that tells the model to go fill the fields first — even though the
- * schema will not let it act on them.
+ * The Scene as the model reads it: an indented outline in reading order, so a
+ * value sits beside its label, a choice under the passage it answers, an
+ * embedded frame where its iframe is. Only lines the schema can name carry an
+ * `[id]`. Unreachable nodes are still DESCRIBED — "Submit exists but is
+ * disabled" is the signal to go fill the fields first — they just carry no id.
  */
 export function describeScene(scene: Scene): string {
-  const lines = [`page: ${scene.title} <${scene.url}>`];
-  const frames = Object.entries(scene.frames ?? {});
-  if (frames.length > 1) {
-    lines.push('frames (node ids start with their frame):');
-    for (const [frameId, frame] of frames) lines.push(`  - f${frameId}: ${frame.title} <${frame.url}>`);
-  }
-  // What is on screen goes first, in every list: around an embedded frame (a
-  // store page, its links, its comments), the page's own nodes come before the
-  // frame's in document order, and would bury what the user is looking at.
-  const nodes = Object.values(scene.nodes).toSorted(
-    (a, b) => Number(b.perception.inViewport) - Number(a.perception.inViewport),
-  );
+  const nodes = Object.values(scene.nodes);
+  const built = buildActionSchema(scene);
+  const nameable = new Set([...(built?.stateIds ?? []), ...(built?.triggerIds ?? [])]);
 
-  lines.push('controls (setState):');
+  // The outline: children by parent, in sibling order (ties keep insertion order).
+  const childrenOf = new Map<NodeId | undefined, SceneNode[]>();
   for (const node of nodes) {
-    if (!isStateNode(node)) continue;
-    const extra = [
-      `control=${node.control}`,
-      `value=${JSON.stringify(node.value)}`,
-      node.options ? `options=${JSON.stringify(node.options.map((o) => o.value))}` : null,
-      node.required ? 'required' : null,
-    ].filter(Boolean);
-    lines.push(`  - id=${node.id} name=${JSON.stringify(node.name ?? '')} ${extra.join(' ')}${flags(node)}`);
+    const key = node.parent !== undefined && scene.nodes[node.parent] ? node.parent : undefined;
+    const siblings = childrenOf.get(key) ?? [];
+    siblings.push(node);
+    childrenOf.set(key, siblings);
   }
+  for (const siblings of childrenOf.values()) siblings.sort((a, b) => a.order - b.order);
+  const kids = (id: NodeId | undefined): SceneNode[] => childrenOf.get(id) ?? [];
+  // Structure and prose the page hides are left out, with everything under them.
+  const shown = (node: SceneNode): boolean =>
+    node.perception.visible || node.category === 'state' || node.category === 'action';
 
-  lines.push('triggers (clickTrigger):');
-  for (const node of nodes) {
-    if (!isActionNode(node)) continue;
-    lines.push(
-      `  - id=${node.id} name=${JSON.stringify(node.name ?? '')} action=${node.action}${flags(node)}`,
-    );
-  }
-
-  const texts = nodes.filter((node): node is ContentNode => node.category === 'content' && node.text.trim() !== '');
-  const readable: string[] = [];
+  // The text budget goes to what is on screen first, then the rest in reading
+  // order; the outline itself stays in reading order either way.
+  const inReadingOrder: SceneNode[] = [];
+  const walk = (parent: NodeId | undefined): void => {
+    for (const node of kids(parent)) {
+      if (!shown(node)) continue;
+      inReadingOrder.push(node);
+      walk(node.id);
+    }
+  };
+  walk(undefined);
+  const textOf = new Map<NodeId, string>();
   let used = 0;
   let omitted = 0;
-  for (const node of texts) {
+  const prose = inReadingOrder
+    .filter((node): node is ContentNode => node.category === 'content' && node.text.trim() !== '')
+    .toSorted((a, b) => Number(b.perception.inViewport) - Number(a.perception.inViewport));
+  for (const node of prose) {
     const room = PAGE_TEXT_BUDGET - used;
     if (room <= 0) {
       omitted += 1;
@@ -130,17 +136,87 @@ export function describeScene(scene: Scene): string {
     }
     const text = node.text.length > room ? `${node.text.slice(0, room)}…` : node.text;
     used += text.length;
-    readable.push(`  - ${node.role}: ${JSON.stringify(text)}`);
+    textOf.set(node.id, text);
   }
-  if (omitted) readable.push(`  (${omitted} more text blocks omitted)`);
-  if (readable.length) lines.push('page text:', ...readable);
 
-  return lines.join('\n');
+  /** One node's own line, or undefined when it is only a wrapper for its children. */
+  const lineFor = (node: SceneNode): string | undefined => {
+    const id = nameable.has(node.id) ? `[${node.id}] ` : '';
+    switch (node.category) {
+      case 'state': {
+        const options = node.options ? ` options=${JSON.stringify(node.options.map((o) => o.value))}` : '';
+        const required = node.required ? ' required' : '';
+        return `${id}(${node.role})${quoted(node.name)} = ${JSON.stringify(node.value)}${options}${required}${flags(node)}`;
+      }
+      case 'action': {
+        const state = [
+          node.expanded === undefined ? null : node.expanded ? 'expanded' : 'collapsed',
+          node.pressed === undefined ? null : node.pressed ? 'pressed' : 'not pressed',
+        ].filter(Boolean);
+        return `${id}(${node.role})${quoted(node.name)}${state.length ? ` (${state.join(', ')})` : ''}${flags(node)}`;
+      }
+      case 'content': {
+        const text = textOf.get(node.id);
+        const role = node.level ? `${node.role} ${node.level}` : node.role;
+        if (text !== undefined) return `(${role}) ${JSON.stringify(text)}`;
+        return node.role === 'img' && node.name ? `(img)${quoted(node.name)}` : undefined;
+      }
+      case 'structure': {
+        if (node.frameSrc !== undefined) return `(iframe)${quoted(node.name)} <${node.frameSrc}>`;
+        if (!node.name && WRAPPER_ROLES.has(node.role)) return undefined;
+        if (!node.name && kids(node.id).length <= 1 && !TABULAR_ROLES.has(node.role)) return undefined;
+        return `(${node.role})${quoted(node.name)}`;
+      }
+    }
+  };
+
+  /** A row of plain cells reads as one line: `(row) Atmosphere: | 100%`. */
+  const rowLine = (node: SceneNode): string | undefined => {
+    if (node.role !== 'row') return undefined;
+    const cells = kids(node.id);
+    if (cells.length === 0 || cells.some((cell) => kids(cell.id).length > 0 || nameable.has(cell.id))) return undefined;
+    return `(row) ${cells.map((cell) => cell.name ?? ('text' in cell ? cell.text : '')).join(' | ')}`;
+  };
+
+  const outline: string[] = [];
+  const render = (parent: NodeId | undefined, depth: number): void => {
+    for (const node of kids(parent)) {
+      if (!shown(node)) continue;
+      const indent = '  '.repeat(depth);
+      const row = rowLine(node);
+      if (row !== undefined) {
+        outline.push(indent + row);
+        continue;
+      }
+      const line = lineFor(node);
+      if (line === undefined) {
+        render(node.id, depth);
+        continue;
+      }
+      outline.push(indent + line);
+      render(node.id, depth + 1);
+    }
+  };
+  render(undefined, 0);
+  if (omitted) outline.push(`(${omitted} more text blocks omitted)`);
+
+  const lines = [`page: ${scene.title} <${scene.url}>`];
+  const frames = Object.entries(scene.frames ?? {});
+  if (frames.length > 1) {
+    lines.push('frames (node ids start with their frame):');
+    for (const [frameId, frame] of frames) lines.push(`  - f${frameId}: ${frame.title} <${frame.url}>`);
+  }
+  return [...lines, 'outline:', ...outline].join('\n');
 }
 
 const SYSTEM = [
   'You drive a web page toward a goal. Read the observation, then answer in the',
   'schema, field by field.',
+  '',
+  'The observation is the page as an indented outline, in reading order: what a',
+  'line sits under is its context (the row a value is in, the passage a choice',
+  'follows). Lines that begin with [id] are the controls and triggers you can',
+  'act on, by that id; every other line is there to be read.',
   '',
   'satisfied: read the CURRENT page and say which parts of the goal it already',
   'meets. A control that already holds the value the goal wants is DONE — you set',
