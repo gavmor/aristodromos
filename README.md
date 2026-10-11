@@ -73,9 +73,23 @@ order:
 
 A value sits beside its label, a choice under the passage it answers. Only lines
 the schema can name carry an `[id]`; disabled controls are still shown, flagged,
-without one. Unnamed wrappers are dropped, a row of plain cells reads as one line,
-and structure or prose the page hides is left out. Page text is shown whole under
-one overall budget, spent on what is on screen first.
+without one. Unnamed wrappers are dropped and a row of plain cells reads as one
+line.
+
+Visibility is the browser's own (`Element.checkVisibility()`), not the element's
+own CSS: a control inside a `display: none` or `opacity: 0` container is not
+seen, so it is neither shown nor nameable. A control's *own* opacity is the one
+exception — custom checkboxes are real inputs at opacity 0. Because CSS can show
+or hide things with no record on the element itself (a flag on `<html>`, a
+stylesheet, an animation ending), any attribute change anywhere, a stylesheet
+coming or going, or a transition or animation ending re-checks `visible` for
+every projected node in that frame's flush.
+
+Text that sits bare in a block (a story engine's passage, prose never wrapped in
+`<p>`) reads as `(text)`; inline wrappers like `<em>` stay part of the sentence,
+and text a paragraph, control or label already carries is not repeated. Page text
+is shown whole under one overall budget, spent on what is on screen first, and no
+single block may take more than 1 500 characters of it.
 
 There are no watermarks, acks or sequence numbers. The loop is **at-least-once
 and memoryless**, and it closes **through the world**: the reconciler applies a

@@ -76,15 +76,36 @@ export function classifyCategory(role: string, el: Element): NodeCategory {
   return 'content';
 }
 
-export function isVisible(el: Element): boolean {
+/**
+ * Rendered and seen: not `display: none`, `visibility: hidden` or
+ * `content-visibility: hidden`, and not transparent, by itself or by any
+ * ancestor. A closed dialog left at `opacity: 0` hides every button in it.
+ *
+ * A control's OWN opacity is the one exception (`control`): a custom checkbox
+ * or radio is very often a real <input> at opacity 0 under a styled label, and
+ * that input is exactly what actuation drives.
+ */
+export function isVisible(el: Element, control = false): boolean {
   if (el.getAttribute('aria-hidden') === 'true') return false;
-  if ((el as HTMLElement).hidden) return false;
-  const style = el.ownerDocument.defaultView?.getComputedStyle(el);
-  if (!style) return true;
-  if (style.display === 'none') return false;
-  if (style.visibility === 'hidden' || style.visibility === 'collapse') return false;
-  if (style.opacity === '0') return false;
-  return true;
+  // The element's own style is not enough: a hidden ancestor hides it just the
+  // same, and a shallow check reports a ghost the model clicks forever.
+  if (typeof el.checkVisibility === 'function') {
+    if (!el.checkVisibility({ visibilityProperty: true })) return false;
+    const opaqueFrom = control ? el.parentElement : el;
+    return opaqueFrom ? opaqueFrom.checkVisibility({ opacityProperty: true }) : true;
+  }
+  // Engines without checkVisibility (jsdom): walk the ancestors the same way.
+  const view = el.ownerDocument.defaultView;
+  if (!view) return true;
+  for (let cur: Element | null = el; cur; cur = cur.parentElement) {
+    if ((cur as HTMLElement).hidden) return false;
+    const style = view.getComputedStyle(cur);
+    if (style.display === 'none') return false;
+    if (style.opacity === '0' && !(control && cur === el)) return false;
+  }
+  // `visibility` inherits, so the element's own computed value already counts its ancestors.
+  const visibility = view.getComputedStyle(el).visibility;
+  return visibility !== 'hidden' && visibility !== 'collapse';
 }
 
 export function isDisabled(el: Element): boolean {
@@ -94,9 +115,9 @@ export function isDisabled(el: Element): boolean {
 
 /** Local perception only. inViewport/occluded/inertByModal are overlaid by the
  *  projector from global-event sources; focused is local (activeElement). */
-export function parseLocalPerception(el: Element): Perception {
+export function parseLocalPerception(el: Element, control = false): Perception {
   return {
-    visible: isVisible(el),
+    visible: isVisible(el, control),
     disabled: isDisabled(el),
     focused: el.ownerDocument.activeElement === el,
     inViewport: false,
@@ -299,6 +320,10 @@ function buildStructureNode(el: Element, base: NodeBase, role: string): Structur
     if (action !== null) node.actionUrl = action;
   }
   if (el.tagName.toLowerCase() === 'iframe') node.frameSrc = (el as HTMLIFrameElement).src;
+  if (!node.name && !coveredByAncestor(el)) {
+    const text = ownText(el);
+    if (text) node.text = text;
+  }
   return prune(node);
 }
 
@@ -335,21 +360,98 @@ export function resolveRole(el: Element): string | null {
   return ROLELESS_TEXT_INPUTS.has(type) ? 'textbox' : null;
 }
 
+/** Never a source of readable text: code, markup, and a label (its text is its control's name). */
+const TEXT_SILENT_TAGS = new Set(['script', 'style', 'noscript', 'template', 'svg', 'math', 'label', 'select', 'textarea']);
+
+/**
+ * Ancestors whose own line already says everything under them: prose and
+ * controls carry their text or name, and so do the structure roles whose
+ * name comes from their content.
+ */
+const NAME_FROM_CONTENT_STRUCTURE = new Set(['row', 'cell', 'gridcell', 'columnheader', 'rowheader', 'tooltip']);
+
+const isSalient = (el: Element): boolean => {
+  const role = resolveRole(el);
+  return role !== null && !NON_SALIENT_ROLES.has(role);
+};
+
+/** Inline elements are part of the sentence around them; blocks read their own text. */
+function isInline(el: Element): boolean {
+  const display = el.ownerDocument.defaultView?.getComputedStyle(el).display ?? '';
+  return display.startsWith('inline') || display === 'contents';
+}
+
+function coveredByAncestor(el: Element): boolean {
+  for (let cur = el.parentElement; cur; cur = cur.parentElement) {
+    if (cur.tagName.toLowerCase() === 'label') return true;
+    const role = resolveRole(cur);
+    if (!role || NON_SALIENT_ROLES.has(role)) continue;
+    if (classifyCategory(role, cur) !== 'structure' || NAME_FROM_CONTENT_STRUCTURE.has(role)) return true;
+  }
+  return false;
+}
+
+/**
+ * The text an element reads out itself: its own text nodes, plus those of the
+ * inline wrappers inside it (an <em> is part of the sentence), but not text
+ * under a descendant that reads its own — a projected node, or another block.
+ */
+export function ownText(el: Element): string {
+  return rawOwnText(el).replace(/\s+/g, ' ').trim();
+}
+
+/** Uncollapsed, so an inline wrapper joins its neighbours exactly as rendered: `<em>scream</em>ing`. */
+function rawOwnText(el: Element): string {
+  let text = '';
+  for (const child of Array.from(el.childNodes)) {
+    if (child.nodeType === 3) {
+      text += child.textContent ?? '';
+      continue;
+    }
+    if (child.nodeType !== 1) continue;
+    const element = child as Element;
+    const tag = element.tagName.toLowerCase();
+    if (tag === 'br') text += ' ';
+    else if (!TEXT_SILENT_TAGS.has(tag) && !isSalient(element) && isInline(element)) text += rawOwnText(element);
+  }
+  return text;
+}
+
+/**
+ * A block with no role that still reads text out — a story engine's passage,
+ * prose a page never wrapped in <p> — projected as content of role `text`.
+ */
+function bareTextNode(el: Element, ctx: ParseContext): ContentNode | null {
+  if (TEXT_SILENT_TAGS.has(el.tagName.toLowerCase()) || isInline(el)) return null;
+  const text = ownText(el);
+  if (!text || coveredByAncestor(el)) return null;
+  return prune({
+    id: ctx.mirror.idFor(el, semanticSignature('text', undefined, structuralPath(el))),
+    role: 'text',
+    category: 'content' as const,
+    text,
+    relations: parseRelations(el, ctx),
+    perception: parseLocalPerception(el),
+    order: 0,
+  });
+}
+
 /** Project a single DOM element into its SceneNode, or null if not salient. */
 export function parseNode(el: Element, ctx: ParseContext): SceneNode | null {
   const role = resolveRole(el);
-  if (!role || NON_SALIENT_ROLES.has(role)) return null;
+  if (!role || NON_SALIENT_ROLES.has(role)) return bareTextNode(el, ctx);
   const name = computeAccessibleName(el) || undefined;
   const id = ctx.mirror.idFor(el, semanticSignature(role, name, structuralPath(el)));
+  const category = classifyCategory(role, el);
   const base: NodeBase = prune({
     id,
     role,
     name,
     relations: parseRelations(el, ctx),
-    perception: parseLocalPerception(el),
+    perception: parseLocalPerception(el, category === 'state' || category === 'action'),
     order: 0,
   });
-  switch (classifyCategory(role, el)) {
+  switch (category) {
     case 'state': return buildStateNode(el, base, role);
     case 'action': return buildActionNode(el, base, role, ctx);
     case 'content': return buildContentNode(el, base, role);

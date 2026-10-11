@@ -65,7 +65,6 @@ export const nothingAfforded = (via: string): Decision => ({
 function flags(node: SceneNode): string {
   const set = [
     node.perception.disabled ? 'disabled' : null,
-    node.perception.visible ? null : 'hidden',
     node.perception.inertByModal ? 'behind modal' : null,
   ].filter(Boolean);
   return set.length ? ` [${set.join(', ')}]` : '';
@@ -73,10 +72,12 @@ function flags(node: SceneNode): string {
 
 /**
  * Page text is the model's only view of prose (a story passage, an error
- * message), so each block goes in whole; one overall budget bounds the prompt.
- * About 1 500 tokens.
+ * message), so it goes in in reading order under one overall budget, about
+ * 1 500 tokens. No single block may take more than TEXT_PER_BLOCK of it: one
+ * wall of text (a long article, a comment thread) must not crowd out the rest.
  */
 const PAGE_TEXT_BUDGET = 6000;
+const TEXT_PER_BLOCK = 1500;
 
 const quoted = (text: string | undefined): string => (text ? ` ${JSON.stringify(text)}` : '');
 
@@ -107,9 +108,9 @@ export function describeScene(scene: Scene): string {
   }
   for (const siblings of childrenOf.values()) siblings.sort((a, b) => a.order - b.order);
   const kids = (id: NodeId | undefined): SceneNode[] => childrenOf.get(id) ?? [];
-  // Structure and prose the page hides are left out, with everything under them.
-  const shown = (node: SceneNode): boolean =>
-    node.perception.visible || node.category === 'state' || node.category === 'action';
+  // What the page does not render is left out, with everything under it: a
+  // hidden control is not reachable either, so it would only be a ghost to click.
+  const shown = (node: SceneNode): boolean => node.perception.visible;
 
   // The text budget goes to what is on screen first, then the rest in reading
   // order; the outline itself stays in reading order either way.
@@ -125,16 +126,20 @@ export function describeScene(scene: Scene): string {
   const textOf = new Map<NodeId, string>();
   let used = 0;
   let omitted = 0;
+  // Prose, and the bare text an unnamed structure node reads out (a list item).
+  const fullTextOf = (node: SceneNode): string | undefined =>
+    node.category === 'content' || node.category === 'structure' ? node.text?.trim() || undefined : undefined;
   const prose = inReadingOrder
-    .filter((node): node is ContentNode => node.category === 'content' && node.text.trim() !== '')
+    .filter((node) => fullTextOf(node) !== undefined)
     .toSorted((a, b) => Number(b.perception.inViewport) - Number(a.perception.inViewport));
   for (const node of prose) {
-    const room = PAGE_TEXT_BUDGET - used;
+    const room = Math.min(PAGE_TEXT_BUDGET - used, TEXT_PER_BLOCK);
     if (room <= 0) {
       omitted += 1;
       continue;
     }
-    const text = node.text.length > room ? `${node.text.slice(0, room)}…` : node.text;
+    const full = fullTextOf(node) ?? '';
+    const text = full.length > room ? `${full.slice(0, room)}…` : full;
     used += text.length;
     textOf.set(node.id, text);
   }
@@ -163,6 +168,8 @@ export function describeScene(scene: Scene): string {
       }
       case 'structure': {
         if (node.frameSrc !== undefined) return `(iframe)${quoted(node.name)} <${node.frameSrc}>`;
+        const text = textOf.get(node.id);
+        if (text !== undefined) return `(${node.role})${quoted(node.name)} ${JSON.stringify(text)}`;
         if (!node.name && WRAPPER_ROLES.has(node.role)) return undefined;
         if (!node.name && kids(node.id).length <= 1 && !TABULAR_ROLES.has(node.role)) return undefined;
         return `(${node.role})${quoted(node.name)}`;

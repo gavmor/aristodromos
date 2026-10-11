@@ -187,6 +187,8 @@ export interface StructureNode extends BaseNode {
   actionUrl?: string;
   /** for an iframe: the document it embeds, to place that frame in the tab's outline */
   frameSrc?: string;
+  /** bare text the node reads out itself when it has no name to carry it (an unnamed list item) */
+  text?: string;
 }
 
 export type SceneNode = StateNode | ActionNode | ContentNode | StructureNode;

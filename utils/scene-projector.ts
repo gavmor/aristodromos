@@ -1,7 +1,7 @@
 import { compare, Operation } from 'fast-json-patch';
 import { Perception, Scene, SceneNode, ScenePatch } from './scene';
 import { NodeIdMirror } from './node-identity';
-import { parseNode, ParseContext } from './semantic-parser';
+import { isVisible, parseNode, ParseContext } from './semantic-parser';
 
 /** The subset of perception that is global (not derivable from the element alone). */
 type GlobalPerception = Partial<Pick<Perception, 'inViewport' | 'occluded' | 'inertByModal'>>;
@@ -29,6 +29,9 @@ function isDialogEl(el: Element): boolean {
   return el.tagName.toLowerCase() === 'dialog' || role === 'dialog' || role === 'alertdialog';
 }
 
+/** A stylesheet entering or leaving can change what is rendered anywhere. */
+const isStylesheet = (node: Node): boolean => node.nodeName === 'STYLE' || node.nodeName === 'LINK';
+
 /**
  * The projection engine. Holds an in-memory Scene, a single dirty-set accumulator
  * fed by BOTH DOM mutations (local perception) and global-event sources
@@ -48,6 +51,8 @@ export class SceneProjector {
   private teardown: Array<() => void> = [];
   /** kept so elements added after start() are watched for viewport changes too */
   private viewportObserver: IntersectionObserver | undefined;
+  /** something may have changed what is rendered, somewhere: re-check every node's `visible` */
+  private visibilityStale = false;
 
   constructor(private deps: ProjectorDeps) {
     const doc = deps.root;
@@ -171,8 +176,28 @@ export class SceneProjector {
       if (this.isProjected(el)) reflow.add(el);
     }
     for (const parent of reflow) this.place(parent, ops);
+    if (this.visibilityStale) this.sweepVisibility(ops);
 
     if (ops.length) this.deps.emit({ kind: 'patch', documentId: this.scene.documentId, ops });
+  }
+
+  /**
+   * Re-check `visible` for every projected node. What CSS shows or hides can
+   * change with no record on the element itself (an ancestor's class, a flag
+   * on <html>, a stylesheet, an animation ending), and a stale `visible` is a
+   * ghost control the model clicks forever. One `checkVisibility()` per node;
+   * no re-parse.
+   */
+  private sweepVisibility(ops: Operation[]): void {
+    this.visibilityStale = false;
+    for (const node of Object.values(this.scene.nodes)) {
+      const el = this.mirror.elementFor(node.id);
+      if (!el) continue;
+      const visible = isVisible(el, node.category === 'state' || node.category === 'action');
+      if (visible === node.perception.visible) continue;
+      node.perception = { ...node.perception, visible };
+      ops.push({ op: 'replace', path: `/nodes/${node.id}/perception/visible`, value: visible });
+    }
   }
 
   private isProjected(el: Element): boolean {
@@ -237,7 +262,9 @@ export class SceneProjector {
 
     if (typeof MutationObserver !== 'undefined') {
       const mo = new MutationObserver((recs) => this.onMutations(recs));
-      mo.observe(doc.body ?? doc.documentElement, {
+      // The whole document, not just <body>: a flag on <html> (`data-init`, a
+      // theme class) or a stylesheet added to <head> can show or hide anything.
+      mo.observe(doc.documentElement, {
         subtree: true,
         childList: true,
         attributes: true,
@@ -277,6 +304,17 @@ export class SceneProjector {
         }
       });
 
+      // CSS that changes what is rendered without touching the DOM: a
+      // stylesheet finishing loading, a transition or animation ending.
+      const onRendering = (): void => {
+        this.visibilityStale = true;
+        this.requestFlush();
+      };
+      for (const type of ['load', 'transitionend', 'animationend']) view.addEventListener(type, onRendering, true);
+      this.teardown.push(() => {
+        for (const type of ['load', 'transitionend', 'animationend']) view.removeEventListener(type, onRendering, true);
+      });
+
       const onFocus = (): void => {
         const active = doc.activeElement;
         if (this.lastFocused && this.lastFocused !== active) this.markDirty(this.lastFocused);
@@ -314,6 +352,20 @@ export class SceneProjector {
     for (const rec of records) {
       if (rec.target instanceof Element) this.markDirty(rec.target);
       if (rec.type === 'childList' && rec.target instanceof Element) this.childListTargets.add(rec.target);
+      // Text belongs to the nearest element that reads it out: a projected
+      // node, or a block of bare text. Either can sit above an inline wrapper.
+      if (rec.type === 'characterData' || rec.type === 'childList') {
+        const start = rec.target instanceof Element ? rec.target : rec.target.parentElement;
+        for (let el = start; el; el = el.parentElement) {
+          this.markDirty(el);
+          if (this.isProjected(el)) break;
+        }
+      }
+      // Any attribute can drive a selector (`html[data-init=loading] #story`),
+      // and a stylesheet changes the rules themselves: what is rendered must be
+      // re-checked everywhere, not just where the record points.
+      if (rec.type === 'attributes') this.visibilityStale = true;
+      if ([...Array.from(rec.addedNodes), ...Array.from(rec.removedNodes)].some(isStylesheet)) this.visibilityStale = true;
       // A record names only the ROOT of an added or removed subtree. Pages that
       // render a whole section at once (a story passage, a framework re-render)
       // put everything that matters below it, so walk it.

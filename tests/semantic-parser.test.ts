@@ -59,9 +59,12 @@ describe('parseNode', () => {
     expect(node.text).toBe('You are drifting through darkness.You wake.');
   });
 
-  it('drops a paragraph its author marked presentational', () => {
+  it('reads a presentational paragraph as bare text, not as a paragraph', () => {
     document.body.innerHTML = '<p role="presentation">layout only</p>';
-    expect(parseNode(first('p'), ctx)).toBeNull();
+    const node = parseNode(first('p'), ctx);
+    if (node?.category !== 'content') throw new Error('expected content');
+    expect(node.role).toBe('text');
+    expect(node.text).toBe('layout only');
   });
 
   it('projects a checkbox as a boolean state node', () => {
@@ -70,6 +73,13 @@ describe('parseNode', () => {
     if (node?.category !== 'state') throw new Error('expected state');
     expect(node.control).toBe('boolean');
     expect(node.value).toBe(true);
+  });
+
+  it('hides what a transparent container holds, but not a control at its own opacity 0', () => {
+    document.body.innerHTML =
+      '<div id="dialog" style="opacity:0"><button>Close</button></div><label><input type="radio" style="opacity:0"> No thanks</label>';
+    expect(parseNode(first('#dialog button'), ctx)?.perception.visible).toBe(false);
+    expect(parseNode(first('input'), ctx)?.perception.visible).toBe(true);
   });
 
   it('reports disabled in local perception', () => {
@@ -87,9 +97,32 @@ describe('parseNode', () => {
     if (node?.category === 'action') expect(node.expanded).toBe(false);
   });
 
-  it('returns null for a semantically empty div', () => {
-    document.body.innerHTML = '<div>just text</div>';
-    expect(parseNode(first('div'), ctx)).toBeNull();
+  it('returns null for a div with no text of its own', () => {
+    document.body.innerHTML = '<div id="wrap">  <button>Go</button>  </div>';
+    expect(parseNode(first('#wrap'), ctx)).toBeNull();
+  });
+
+  it('reads a block of bare text, inline wrappers and line breaks included, links excluded', () => {
+    document.body.innerHTML =
+      '<div class="passage">PROLOGUE<br>You come home to <em>screaming</em> and smoke. <a href="#run">Run</a></div>';
+    const node = parseNode(first('.passage'), ctx);
+    if (node?.category !== 'content') throw new Error('expected content');
+    expect(node.role).toBe('text');
+    expect(node.text).toBe('PROLOGUE You come home to screaming and smoke.');
+  });
+
+  it('does not repeat text a paragraph, a control or a label already carries', () => {
+    document.body.innerHTML = '<p>Read <span style="display:block">this</span></p><button><div>Go</div></button><label><div>Email</div><input></label>';
+    expect(parseNode(first('p span'), ctx)).toBeNull();
+    expect(parseNode(first('button div'), ctx)).toBeNull();
+    expect(parseNode(first('label div'), ctx)).toBeNull();
+  });
+
+  it('gives an unnamed list item its own text', () => {
+    document.body.innerHTML = '<ul><li>Ada <a href="#a">profile</a></li></ul>';
+    const node = parseNode(first('li'), ctx);
+    if (node?.category !== 'structure') throw new Error('expected structure');
+    expect(node.text).toBe('Ada');
   });
 });
 

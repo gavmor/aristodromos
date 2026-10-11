@@ -153,4 +153,55 @@ describe('SceneProjector.flush', () => {
     expect(placed.parent).toBe(proj.current.nodes[ada].parent);
     expect(proj.current.nodes[katherine].order).toBe(3);
   });
+
+  it('re-checks what a container holds when the container is shown', async () => {
+    document.body.innerHTML = '<div id="section16" style="display:none"><button>Confirm</button></div>';
+    const { proj } = makeProjector();
+    proj.scan();
+    const confirm = () => Object.values(proj.current.nodes).find((n) => n.name === 'Confirm')!;
+    expect(confirm().perception.visible).toBe(false);
+
+    proj.start();
+    document.getElementById('section16')!.style.display = 'block'; // a change on the container only
+    await Promise.resolve(); // MutationObserver delivers in the microtask queued by the change
+    proj.flush();
+    proj.stop();
+    expect(confirm().perception.visible).toBe(true);
+  });
+
+  it('carries a text edit inside an inline wrapper to the block that reads it', async () => {
+    document.body.innerHTML = '<div class="passage">Your gold is <b id="gold">10</b> coins.</div>';
+    const { proj } = makeProjector();
+    proj.scan();
+    proj.start();
+    document.getElementById('gold')!.firstChild!.textContent = '0';
+    await Promise.resolve(); // MutationObserver delivers in the microtask queued by the edit
+    proj.flush();
+    proj.stop();
+    const passage = Object.values(proj.current.nodes).find((n) => n.role === 'text');
+    expect(passage && 'text' in passage ? passage.text : undefined).toBe('Your gold is 0 coins.');
+  });
+
+  it('re-checks what is rendered when a flag on <html> changes', async () => {
+    // SugarCube hides its story this way while it loads; nothing below <html> changes.
+    document.head.innerHTML = '<style>html[data-init=loading] #story { display: none }</style>';
+    document.documentElement.dataset.init = 'loading';
+    document.body.innerHTML = '<div id="story"><a href="#begin">Begin the game</a></div>';
+    try {
+      const { proj } = makeProjector();
+      proj.scan();
+      const begin = () => Object.values(proj.current.nodes).find((n) => n.name === 'Begin the game')!;
+      expect(begin().perception.visible).toBe(false);
+
+      proj.start();
+      delete document.documentElement.dataset.init;
+      await Promise.resolve(); // MutationObserver delivers in the microtask queued by the change
+      proj.flush();
+      proj.stop();
+      expect(begin().perception.visible).toBe(true);
+    } finally {
+      document.head.innerHTML = '';
+      delete document.documentElement.dataset.init;
+    }
+  });
 });

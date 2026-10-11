@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MockLanguageModelV4 } from 'ai/test';
 import { decide, describeScene } from '../utils/brain';
+import { buildActionSchema } from '../utils/action-schema';
 import { SceneProjector } from '../utils/scene-projector';
 import { TabScene } from '../utils/tab-scene';
 import type { ActionNode, ContentNode, Perception, Scene, SceneNode, StructureNode } from '../utils/scene';
@@ -65,19 +66,26 @@ describe('describeScene', () => {
     expect(text).toContain(JSON.stringify(passage));
   });
 
+  it('caps any one block, so a wall of text cannot crowd out the rest', () => {
+    const wall = 'w'.repeat(5000);
+    const text = describeScene(sceneOf(paragraph('p1', wall), paragraph('p2', 'The passage that matters.')));
+    expect(text).toContain(JSON.stringify(`${'w'.repeat(1500)}…`));
+    expect(text).toContain('"The passage that matters."');
+  });
+
   it('bounds page text by one overall budget and says what it left out', () => {
-    const block = 'x'.repeat(2500);
-    const text = describeScene(sceneOf(paragraph('p1', block), paragraph('p2', block), paragraph('p3', block), paragraph('p4', block)));
-    expect(text).toContain(JSON.stringify(block)); // the first two fit whole
-    expect(text).toContain(JSON.stringify(`${'x'.repeat(1000)}…`)); // the third is cut at the budget
+    const block = 'x'.repeat(1500);
+    const blocks = ['p1', 'p2', 'p3', 'p4', 'p5'].map((id) => paragraph(id, block));
+    const text = describeScene(sceneOf(...blocks));
+    expect(text.split(JSON.stringify(block)).length - 1).toBe(4); // four fit whole
     expect(text).toContain('(1 more text blocks omitted)');
   });
 
   it('spends the text budget on what is on screen first, and still reads in page order', () => {
-    const offscreen = (id: string): ContentNode => ({ ...paragraph(id, 'c'.repeat(3000)), perception: { ...perception, inViewport: false } });
+    const offscreen = (id: string): ContentNode => ({ ...paragraph(id, 'c'.repeat(1500)), perception: { ...perception, inViewport: false } });
     const story = 'You wake in a tunnel.';
     // Page order puts a store page's comments first; the game's passage is on screen.
-    const text = describeScene(sceneOf(offscreen('p1'), offscreen('p2'), offscreen('p3'), paragraph('p4', story)));
+    const text = describeScene(sceneOf(...['p1', 'p2', 'p3', 'p4', 'p5'].map(offscreen), paragraph('p6', story)));
     expect(text).toContain(JSON.stringify(story));
     expect(text).toContain('(1 more text blocks omitted)');
     expect(text.indexOf('ccc')).toBeLessThan(text.indexOf(story));
@@ -118,6 +126,29 @@ describe('describeScene', () => {
     const text = outlineOf('<nav aria-label="Menu" style="display:none"><a href="/secret">Secret</a></nav><a href="/shown">Shown</a>');
     expect(text).not.toContain('Secret');
     expect(text).toMatch(/\(link\) "Shown"/);
+  });
+
+  it('neither lists nor lets the model name a control its container hides', () => {
+    document.body.innerHTML = '<div id="section16" style="display:none"><button>Confirm</button></div><button>Continue</button>';
+    const snapshot = new SceneProjector({ root: document, emit: () => {}, schedule: () => {} }).scan();
+    if (snapshot.kind !== 'snapshot') throw new Error('expected a snapshot');
+    const text = describeScene(snapshot.scene);
+    expect(text).not.toContain('Confirm');
+    const confirm = Object.values(snapshot.scene.nodes).find((n) => n.name === 'Confirm')!;
+    expect(buildActionSchema(snapshot.scene)!.triggerIds).not.toContain(confirm.id);
+  });
+
+  it('keeps a control the page renders at opacity 0, as custom radios do', () => {
+    const text = outlineOf('<label><input type="radio" name="c" style="opacity:0"> No thanks</label>');
+    expect(text).toMatch(/\[n\d+\] \(radio\) "No thanks"/);
+  });
+
+  it('reads a story passage that is bare text in a div', () => {
+    const text = outlineOf(
+      '<div class="passage">PROLOGUE<br>You come home to <em>screaming</em>.<br><a href="#run">Run</a></div>',
+    );
+    expect(text).toContain('(text) "PROLOGUE You come home to screaming."');
+    expect(text.indexOf('PROLOGUE')).toBeLessThan(text.indexOf('"Run"'));
   });
 
   it('reads an embedded frame where its iframe sits in the page', () => {

@@ -61,7 +61,9 @@ export const isActionNode = (n: SceneNode): n is ActionNode => n.category === 'a
 
 /**
  * Actuatable by this agent RIGHT NOW. `disabled` and `inertByModal` make an
- * otherwise-present node unactuatable, so they gate the enum.
+ * otherwise-present node unactuatable, so they gate the enum; so does not
+ * being rendered at all (a control inside a `display: none` container), which
+ * a model would otherwise click forever with nothing happening.
  *
  * So does a `javascript:` link. Its URL runs as script, and when the click
  * comes from the content script's isolated world that script falls under the
@@ -70,7 +72,7 @@ export const isActionNode = (n: SceneNode): n is ActionNode => n.category === 'a
  * Links whose handler is an `onclick` (with `href="#"`) are unaffected.
  */
 export function isReachable(node: SceneNode): boolean {
-  if (node.perception.disabled || node.perception.inertByModal) return false;
+  if (node.perception.disabled || node.perception.inertByModal || !node.perception.visible) return false;
   return !(isActionNode(node) && node.href?.trim().toLowerCase().startsWith('javascript:'));
 }
 
