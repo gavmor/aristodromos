@@ -231,6 +231,8 @@ utils/
 ├── system-one.ts       # typed POST /v1/systemone client (provider-agnostic)
 ├── system-one-questions.ts # Scene → choice questions; slug ↔ (verb, nodeId)
 ├── system-one-brain.ts # the System One brain + the confidence gate
+├── tracing.ts          # one OTLP provider per endpoint+project: AI SDK telemetry + a tracer
+├── openinference-decision/ # DECISION spans over a fetch seam (Apache-2.0 fork; LICENSE, NOTICE)
 ├── agent-loop.ts       # settle debounce, tick budget, decide/emit (no browser API)
 ├── scene-store.ts      # one frame's replica, folded from its patch stream
 ├── tab-scene.ts        # a tab's frames composed into one Scene; frame-namespaced node ids
@@ -361,7 +363,32 @@ has no context manager, which is fine, since the AI SDK passes each child span's
 parent explicitly, and it can be evicted at any idle moment, so each span is
 exported as it ends rather than batched. The OTLP exporter's browser build sends
 with `fetch`; the extension's host permissions cover the collector, so Phoenix
-needs no CORS setup. The System One classifier is not traced.
+needs no CORS setup.
+
+With `systemOne` set as well, each `POST /v1/systemone` is exported through the
+same provider as an OpenInference
+[`DECISION`](https://github.com/Arize-ai/openinference/blob/main/spec/decision_spans.md)
+span: the request and response bodies as `input.value` / `output.value`,
+`decision.system` = `typesafe` (the spec's value for the Jev shape, whoever
+serves it), the requested and answering models, and `usage` as
+`decision.token_count.input` / `.output`. No `decision.provider` is set, since
+nothing in the protocol says who runs a Jev server. A non-2xx is an error span
+with its status and body; a transport failure is an error span with the
+exception.
+
+When the gate falls back, the System One call and the Ollama call are two traces,
+not one. The AI SDK roots its spans in the active context, and a worker has no
+context manager to make the gate that context; adjacent start times are the link.
+
+`utils/openinference-decision/` does the DECISION spans. It is a fork of
+OpenInference's TypeSafe instrumentation, Apache-2.0, with its own `LICENSE` and
+`NOTICE`. Upstream patches `@typesafe-ai/sdk` through a require hook, which a
+bundled worker cannot do; here a decision client's `fetch` is wrapped instead
+(`traceDecisions`), with the tracer and parent context passed in. What differs
+between decision APIs is one constant per protocol: `JEV_SYSTEM_ONE`, and
+`OPENAI_DECISIONS` for OpenAI's `POST /v1/decisions` (system and provider both
+`openai`), which reads the same `model` and `usage` fields. No client calls the
+latter yet.
 
 ## Evidence
 

@@ -4,6 +4,8 @@
 // `@arizeai/openinference-vercel` enriches them with OpenInference attributes
 // (span kind, input/output messages, the schema, token counts) so Phoenix shows
 // each decision as an LLM call: the outline the model saw, and what it chose.
+// System One calls are traced by ./openinference-decision, as DECISION spans,
+// through the same provider: `tracer` is handed to it for that.
 //
 // Nothing is registered globally. The integration is handed to each
 // `generateObject` call, which takes precedence over any global one, so tracing
@@ -20,33 +22,40 @@
 import { OpenTelemetry } from '@ai-sdk/otel';
 import { SEMRESATTRS_PROJECT_NAME } from '@arizeai/openinference-semantic-conventions';
 import { enrichSpanWithOpenInference, OpenInferenceSimpleSpanProcessor } from '@arizeai/openinference-vercel';
+import type { Tracer } from '@opentelemetry/api';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { BasicTracerProvider } from '@opentelemetry/sdk-trace-base';
 import type { Telemetry } from 'ai';
 import type { TracingSettings } from './agent-config';
 
-interface Tracing {
-  key: string;
-  provider: BasicTracerProvider;
+export interface Tracing {
+  /** the AI SDK integration, passed to each `generateObject` call */
   telemetry: Telemetry;
+  /** for the spans this repo starts itself: System One's DECISION spans */
+  tracer: Tracer;
 }
 
-let current: Tracing | undefined;
+interface CurrentTracing extends Tracing {
+  key: string;
+  provider: BasicTracerProvider;
+}
+
+let current: CurrentTracing | undefined;
 
 /**
- * The telemetry integration for these settings, or undefined when tracing is
- * off. One provider per endpoint and project, reused across decisions; a change
- * of either flushes and shuts down the old one.
+ * The tracing for these settings, or undefined when tracing is off. One
+ * provider per endpoint and project, reused across decisions; a change of
+ * either flushes and shuts down the old one.
  */
-export function telemetryFor(settings: TracingSettings | undefined): Telemetry | undefined {
+export function tracingFor(settings: TracingSettings | undefined): Tracing | undefined {
   const key = settings ? `${settings.endpoint}\n${settings.project}` : undefined;
   if (current && current.key !== key) {
     void current.provider.shutdown();
     current = undefined;
   }
   if (!settings || key === undefined) return undefined;
-  if (current) return current.telemetry;
+  if (current) return current;
 
   const provider = new BasicTracerProvider({
     resource: resourceFromAttributes({ [SEMRESATTRS_PROJECT_NAME]: settings.project }),
@@ -54,12 +63,13 @@ export function telemetryFor(settings: TracingSettings | undefined): Telemetry |
       new OpenInferenceSimpleSpanProcessor({ exporter: new OTLPTraceExporter({ url: settings.endpoint }) }),
     ],
   });
+  const tracer = provider.getTracer('aristodromos');
   const telemetry = new OpenTelemetry({
-    tracer: provider.getTracer('aristodromos'),
+    tracer,
     enrichSpan: enrichSpanWithOpenInference,
     usage: true,
     schema: true,
   });
-  current = { key, provider, telemetry };
-  return telemetry;
+  current = { key, provider, telemetry, tracer };
+  return current;
 }

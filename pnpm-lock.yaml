@@ -203,6 +203,9 @@ importers:
       '@andypf/json-viewer':
         specifier: ^2.8.0
         version: 2.8.0(patch_hash=8f41231de590800b137eaccdb384be32c8a0bf26d097ef5d7b175a1cb41dd2a0)
+      '@arizeai/openinference-core':
+        specifier: ^2.8.0
+        version: 2.8.0
       '@arizeai/openinference-semantic-conventions':
         specifier: ^2.14.0
         version: 2.14.0
@@ -221,6 +224,9 @@ importers:
       '@opentelemetry/sdk-trace-base':
         specifier: ^2.12.0
         version: 2.12.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/semantic-conventions':
+        specifier: ^1.43.0
+        version: 1.43.0
       ai:
         specifier: ^7.0.137
         version: 7.0.137(zod@4.6.5)

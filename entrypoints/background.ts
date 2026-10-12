@@ -14,8 +14,10 @@
 import { createOllama } from 'ollama-ai-provider-v2';
 import { AgentLoop } from '../utils/agent-loop';
 import { aiSdkBrain, nothingAfforded, type Brain } from '../utils/brain';
+import { JEV_SYSTEM_ONE } from '../utils/openinference-decision/protocols';
+import { traceDecisions } from '../utils/openinference-decision/trace';
 import { createGatedBrain, createSystemOneBrain } from '../utils/system-one-brain';
-import { telemetryFor } from '../utils/tracing';
+import { tracingFor } from '../utils/tracing';
 import {
   CONFIG_KEY,
   DECIDE_NOW_KEY,
@@ -71,14 +73,24 @@ function setBadge(tabId: number, enabled: boolean, paused: boolean): void {
  * With `systemOne` configured the cheap classifier decides first and the Ollama
  * brain becomes the confidence-gated fallback; without it, the Ollama brain is
  * the whole brain, exactly as before.
+ *
+ * With `tracing` set, both sides are traced through one provider, but not into
+ * one trace: the System One call is a DECISION trace, and a fallback is an AI
+ * SDK trace of its own. The AI SDK roots its spans in `context.active()`, which
+ * a worker without a context manager cannot point at the gate.
  */
 function brainFor(config: AgentConfig): Brain {
+  const tracing = tracingFor(config.tracing);
   const ollama = createOllama({ baseURL: config.baseURL });
-  const slow = aiSdkBrain(ollama.chat(config.model), telemetryFor(config.tracing));
+  const slow = aiSdkBrain(ollama.chat(config.model), tracing?.telemetry);
   if (!config.systemOne) return slow;
 
   return createGatedBrain({
-    fast: createSystemOneBrain({ baseURL: config.systemOne.baseURL, model: config.systemOne.model }),
+    fast: createSystemOneBrain({
+      baseURL: config.systemOne.baseURL,
+      model: config.systemOne.model,
+      fetchImpl: tracing && traceDecisions({ tracer: tracing.tracer, protocol: JEV_SYSTEM_ONE }),
+    }),
     slow,
     threshold: config.systemOne.threshold,
   });
