@@ -1,0 +1,25 @@
+OpenInference DECISION spans for any decision API, over a fetch seam.
+
+This directory is a fork of the OpenInference TypeSafe instrumentation:
+
+  https://github.com/Arize-ai/openinference
+  js/packages/openinference-instrumentation-typesafe/src
+  (attributes.ts, instrumentation.ts) at commit
+  c364180e5be52f0cdc00fbc88f9462603569f4e2
+
+which is Copyright the OpenInference authors (Arize AI), licensed under the
+Apache License, Version 2.0. Everything in this directory is distributed under
+that license; see LICENSE here. The rest of this repository is not.
+
+Changes from upstream:
+
+- attributes.ts reads the request and response as the JSON bodies on the
+  wire instead of @typesafe-ai/sdk objects, records non-JSON bodies as text,
+  and no longer records the SDK's timeout/retry invocation parameters.
+- trace.ts replaces instrumentation.ts. The @typesafe-ai/sdk binding is gone:
+  no InstrumentationBase, no require-hook or prototype patching, no APIPromise
+  handling, no OITracer trace config, no suppressed-tracing check. A decision
+  call is traced by wrapping the fetch it is made with, using a tracer and
+  parent context the caller passes in.
+- protocols.ts is new: the per-protocol constants (Jev System One, OpenAI
+  Decisions).
