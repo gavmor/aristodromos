@@ -15,6 +15,7 @@ import { createOllama } from 'ollama-ai-provider-v2';
 import { AgentLoop } from '../utils/agent-loop';
 import { aiSdkBrain, nothingAfforded, type Brain } from '../utils/brain';
 import { createGatedBrain, createSystemOneBrain } from '../utils/system-one-brain';
+import { telemetryFor } from '../utils/tracing';
 import {
   CONFIG_KEY,
   DECIDE_NOW_KEY,
@@ -73,7 +74,7 @@ function setBadge(tabId: number, enabled: boolean, paused: boolean): void {
  */
 function brainFor(config: AgentConfig): Brain {
   const ollama = createOllama({ baseURL: config.baseURL });
-  const slow = aiSdkBrain(ollama.chat(config.model));
+  const slow = aiSdkBrain(ollama.chat(config.model), telemetryFor(config.tracing));
   if (!config.systemOne) return slow;
 
   return createGatedBrain({

@@ -15,7 +15,7 @@
 // Everything else the spike established holds: pure function of (Scene, goal),
 // memoryless, and it EMITS intent rather than performing it — the content script
 // still owns actuation, which is what keeps the loop safe to retry.
-import { generateObject, type LanguageModel } from 'ai';
+import { generateObject, type LanguageModel, type Telemetry } from 'ai';
 import { buildActionSchema, isScriptHref, type Plan, type PlanAction } from './action-schema';
 import type { ContentNode, NodeId, Scene, SceneNode } from './scene';
 
@@ -266,8 +266,10 @@ export async function decide(options: {
   goal: string;
   model: LanguageModel;
   signal?: AbortSignal;
+  /** where to trace this call; absent, nothing is traced */
+  telemetry?: Telemetry;
 }): Promise<Decision> {
-  const { scene, goal, model, signal } = options;
+  const { scene, goal, model, signal, telemetry } = options;
 
   const built = buildActionSchema(scene);
   if (!built) return nothingAfforded(AI_SDK_BRAIN);
@@ -278,6 +280,7 @@ export async function decide(options: {
     system: SYSTEM,
     prompt: `goal: ${goal}\n\nobservation:\n${describeScene(scene)}`,
     abortSignal: signal,
+    telemetry: telemetry ? { integrations: telemetry, functionId: 'decide' } : { isEnabled: false },
   });
 
   const plan = result.object as Plan;
@@ -296,8 +299,8 @@ export async function decide(options: {
   return { decided: true, via: AI_SDK_BRAIN, satisfied: plan.satisfied, remaining: plan.remaining, actions };
 }
 
-/** `decide` as a `Brain`: the model is bound once, the Scene arrives per call. */
+/** `decide` as a `Brain`: the model (and its tracing) bound once, the Scene arrives per call. */
 export const aiSdkBrain =
-  (model: LanguageModel): Brain =>
+  (model: LanguageModel, telemetry?: Telemetry): Brain =>
   (input) =>
-    decide({ ...input, model });
+    decide({ ...input, model, telemetry });

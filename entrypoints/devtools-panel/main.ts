@@ -13,6 +13,7 @@ import {
   PAUSED_KEY,
   PENDING_KEY,
   SUGGESTED_SYSTEM_ONE,
+  SUGGESTED_TRACING,
   TURN_LOG_KEY,
   enabledTabsOf,
   resolveConfig,
@@ -55,6 +56,10 @@ const ui = {
   soBaseURL: el<HTMLInputElement>('so-base-url'),
   soModel: el<HTMLInputElement>('so-model'),
   soThreshold: el<HTMLInputElement>('so-threshold'),
+  trEnabled: el<HTMLInputElement>('tr-enabled'),
+  trFields: el<HTMLFieldSetElement>('tr-fields'),
+  trEndpoint: el<HTMLInputElement>('tr-endpoint'),
+  trProject: el<HTMLInputElement>('tr-project'),
   saveNote: el<HTMLSpanElement>('save-note'),
   allTabs: el<HTMLInputElement>('all-tabs'),
   clearLog: el<HTMLButtonElement>('clear-log'),
@@ -158,9 +163,10 @@ ui.decideNow.addEventListener('click', () => {
 
 // ── config form ──────────────────────────────────────────────────────────────
 
-function syncSystemOneFields(): void {
+function syncOptionalFields(): void {
   // A disabled fieldset skips validation and is left out of the saved config.
   ui.soFields.disabled = !ui.soEnabled.checked;
+  ui.trFields.disabled = !ui.trEnabled.checked;
 }
 
 function fillForm(config: AgentConfig): void {
@@ -172,7 +178,11 @@ function fillForm(config: AgentConfig): void {
   ui.soBaseURL.value = systemOne.baseURL;
   ui.soModel.value = systemOne.model;
   ui.soThreshold.value = String(systemOne.threshold);
-  syncSystemOneFields();
+  const tracing = config.tracing ?? SUGGESTED_TRACING;
+  ui.trEnabled.checked = config.tracing !== undefined;
+  ui.trEndpoint.value = tracing.endpoint;
+  ui.trProject.value = tracing.project;
+  syncOptionalFields();
   dirty = false;
 }
 
@@ -189,10 +199,14 @@ function readForm(): AgentConfig {
       threshold: Number(ui.soThreshold.value),
     };
   }
+  if (ui.trEnabled.checked) {
+    config.tracing = { endpoint: ui.trEndpoint.value.trim(), project: ui.trProject.value.trim() };
+  }
   return config;
 }
 
-ui.soEnabled.addEventListener('change', syncSystemOneFields);
+ui.soEnabled.addEventListener('change', syncOptionalFields);
+ui.trEnabled.addEventListener('change', syncOptionalFields);
 ui.form.addEventListener('input', () => {
   dirty = true;
   ui.saveNote.textContent = 'unsaved';

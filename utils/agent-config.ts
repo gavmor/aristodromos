@@ -16,6 +16,11 @@ export interface AgentConfig {
    * the Ollama brain kept as the confidence-gated fallback.
    */
   systemOne?: SystemOneSettings;
+  /**
+   * Optional: send a trace of every brain call to an OTLP collector such as
+   * Arize Phoenix. Absent by default; nothing leaves the browser for it.
+   */
+  tracing?: TracingSettings;
 }
 
 export interface SystemOneSettings {
@@ -25,6 +30,13 @@ export interface SystemOneSettings {
   model: string;
   /** below this calibrated confidence the decision is handed to the Ollama brain */
   threshold: number;
+}
+
+export interface TracingSettings {
+  /** OTLP/HTTP traces endpoint, protobuf: Phoenix serves it at `/v1/traces` */
+  endpoint: string;
+  /** the Phoenix project the traces land in */
+  project: string;
 }
 
 export const CONFIG_KEY = 'agentConfig';
@@ -74,4 +86,10 @@ export const SUGGESTED_SYSTEM_ONE: SystemOneSettings = {
   baseURL: 'http://localhost:18080',
   model: 'autojev',
   threshold: 0.6,
+};
+
+/** Where a local Phoenix (`docker run -p 6006:6006 arizephoenix/phoenix`) listens. */
+export const SUGGESTED_TRACING: TracingSettings = {
+  endpoint: 'http://localhost:6006/v1/traces',
+  project: 'aristodromos',
 };
