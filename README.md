@@ -253,11 +253,26 @@ e2e/
 |---|---|
 | `pnpm dev` | WXT dev server (HMR) |
 | `pnpm build` | Production MV3 build |
+| `pnpm zip` | Production build, zipped under `.output/` |
 | `pnpm test` | Vitest unit tests |
 | `pnpm typecheck` | `tsc --noEmit` |
 | `pnpm cpd` | Copy-paste detection |
 | `pnpm e2e` | Build, then drive a real page headlessly end to end |
 | `pnpm probe` | One System One decision per page state, against a real Jev server |
+
+## CI and releases
+
+`.github/workflows/ci.yml` runs on every pull request and every push to `main`:
+a frozen-lockfile install, then `pnpm typecheck`, `pnpm test`, `pnpm cpd`,
+`pnpm build` and `pnpm zip`. `pnpm e2e` and `pnpm probe` are not run in CI; they
+need a local Ollama, Chromium and Jev server.
+
+Each green push to `main` publishes a GitHub Release with the extension zip
+attached. Tags are `build-<N>`, where `N` is the number of commits reachable
+from the built commit (`git rev-list --count <sha>`), so they grow with `main`
+and nobody bumps a version by hand. A failing build never releases. Pull
+requests run the release step as a dry run, which validates the zip and prints
+the tag it would publish.
 
 ## Prerequisites
 
