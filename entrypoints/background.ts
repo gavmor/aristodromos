@@ -19,6 +19,10 @@ import { traceDecisions } from '../utils/openinference-decision/trace';
 import { createGatedBrain, createSystemOneBrain } from '../utils/system-one-brain';
 import { tracingFor } from '../utils/tracing';
 import {
+  BackgroundPolicyHandler,
+  createConfiguredStrategy,
+} from '../utils/policy-handler';
+import {
   CONFIG_KEY,
   DECIDE_NOW_KEY,
   ENABLED_TABS_KEY,
@@ -107,6 +111,7 @@ export default defineBackground(() => {
   interface TabAgent {
     loop: AgentLoop;
     ports: Map<number, Browser.runtime.Port>;
+    policyHandlers: Map<number, BackgroundPolicyHandler>;
   }
   const tabs = new Map<number, TabAgent>();
   const pending = new Map<number, PendingDecision>();
@@ -134,6 +139,7 @@ export default defineBackground(() => {
     const existing = tabs.get(tabId);
     if (existing) return existing;
     const ports = new Map<number, Browser.runtime.Port>();
+    const policyHandlers = new Map<number, BackgroundPolicyHandler>();
     const loop = new AgentLoop({
       decide: async (scene, signal) => {
         const config = await readConfig();
@@ -159,7 +165,7 @@ export default defineBackground(() => {
       },
     });
     loop.setPaused(!runs(tabId));
-    const agent = { loop, ports };
+    const agent = { loop, ports, policyHandlers };
     tabs.set(tabId, agent);
     return agent;
   };
@@ -205,7 +211,17 @@ export default defineBackground(() => {
       console.log(`[agent] ${paused ? 'paused' : 'resumed'}`);
     }
     // A new goal or brain is a new task: every connected page decides afresh.
-    if (CONFIG_KEY in changes) for (const { loop } of tabs.values()) loop.retarget();
+    if (CONFIG_KEY in changes) {
+      const config = resolveConfig(changes[CONFIG_KEY].newValue);
+      const strategy = createConfiguredStrategy(config);
+      for (const { loop, policyHandlers } of tabs.values()) {
+        loop.retarget();
+        for (const handler of policyHandlers.values()) {
+          handler.setGoal(config.goal);
+          handler.setStrategy(strategy);
+        }
+      }
+    }
   });
 
   // ACTION: the toolbar icon switches the agent on or off for the tab it is clicked in.
@@ -247,14 +263,34 @@ export default defineBackground(() => {
     // A navigated frame keeps its frame id; its new content script replaces the old port.
     agent.ports.set(frameId, port);
 
+    const policyHandler = new BackgroundPolicyHandler({
+      strategy: createConfiguredStrategy(),
+      send: (plan) => {
+        try {
+          port.postMessage(plan);
+        } catch {
+          // Frame disconnected before plan delivery
+        }
+      },
+    });
+    void readConfig().then((config) => {
+      policyHandler.setGoal(config.goal);
+      policyHandler.setStrategy(createConfiguredStrategy(config));
+    });
+    agent.policyHandlers.set(frameId, policyHandler);
+
     port.onMessage.addListener((raw) => {
-      const message = raw as ScenePatch;
-      agent.loop.ingest(message, frameId);
-      toInspectors(tabId, { frameId, message });
+      void policyHandler.ingest(raw);
+      if (raw && typeof raw === 'object' && ('scene' in raw || ('documentId' in raw && 'ops' in raw))) {
+        const message = raw as ScenePatch;
+        agent.loop.ingest(message, frameId);
+        toInspectors(tabId, { frameId, message });
+      }
     });
     port.onDisconnect.addListener(() => {
       if (agent.ports.get(frameId) !== port) return; // already replaced by a newer document
       agent.ports.delete(frameId);
+      agent.policyHandlers.delete(frameId);
       agent.loop.dropFrame(frameId);
       toInspectors(tabId, { frameId, gone: true });
       console.log(`[agent] frame ${frameId} of tab ${tabId} disconnected`);

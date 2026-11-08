@@ -48,6 +48,7 @@ export interface WireStateTarget {
   id?: string | number | null;
   type?: string | null;
   label?: string | null;
+  name?: string | null;
   current_value?: string | number | boolean | null;
   currentValue?: string | number | boolean | null;
   is_idempotent?: boolean;
@@ -61,6 +62,7 @@ export interface WireTriggerElement {
   id?: string | number | null;
   type?: string | null;
   label?: string | null;
+  name?: string | null;
   is_idempotent?: boolean;
   risk_level?: string;
   side_effect_hint?: string;
@@ -89,11 +91,12 @@ export interface WireSemanticPageMap {
 export function normalizeStateTarget(raw: WireStateTarget): StateTargetAffordance {
   const rawValue = raw.current_value !== undefined ? raw.current_value : raw.currentValue;
   const val = rawValue === null || rawValue === undefined ? '' : rawValue;
+  const rawLabel = raw.label != null ? raw.label : raw.name;
 
   return {
     id: raw.id != null ? String(raw.id) : '',
     type: raw.type != null ? String(raw.type) : 'text_input',
-    label: raw.label != null ? String(raw.label) : '',
+    label: rawLabel != null ? String(rawLabel) : '',
     current_value: val,
   };
 }
@@ -104,10 +107,11 @@ export function normalizeStateTarget(raw: WireStateTarget): StateTargetAffordanc
  * Strips wire-only fields like risk_level, side_effect_hint, and is_idempotent.
  */
 export function normalizeTriggerElement(raw: WireTriggerElement): TriggerElementAffordance {
+  const rawLabel = raw.label != null ? raw.label : raw.name;
   return {
     id: raw.id != null ? String(raw.id) : '',
     type: raw.type != null ? String(raw.type) : 'button_click',
-    label: raw.label != null ? String(raw.label) : '',
+    label: rawLabel != null ? String(rawLabel) : '',
   };
 }
 
@@ -174,5 +178,23 @@ export function applySemanticPatch(
 
   // fast-json-patch with mutateDocument=false returns a new cloned document
   const result = applyPatch(map, ops, false, false);
-  return result.newDocument as SemanticPageMap;
+  const newDoc = result.newDocument as SemanticPageMap;
+
+  // Guarantee labels reach strategy intact when affordances are added with a name field
+  if (Array.isArray(newDoc.state_targets)) {
+    for (const item of newDoc.state_targets as (StateTargetAffordance & { name?: string })[]) {
+      if (item && item.label == null && item.name != null) {
+        item.label = String(item.name);
+      }
+    }
+  }
+  if (Array.isArray(newDoc.trigger_elements)) {
+    for (const item of newDoc.trigger_elements as (TriggerElementAffordance & { name?: string })[]) {
+      if (item && item.label == null && item.name != null) {
+        item.label = String(item.name);
+      }
+    }
+  }
+
+  return newDoc;
 }

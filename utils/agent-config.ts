@@ -10,6 +10,10 @@ export interface AgentConfig {
   model: string;
   baseURL: string;
   /**
+   * Configured agent strategy. Defaults to 'llm', with 'random' available for test runs.
+   */
+  strategy?: 'llm' | 'random' | string;
+  /**
    * Optional System-One decider in FRONT of the Ollama brain. Absent by
    * default, which is the pre-existing behaviour exactly: one `generateObject`
    * call per observation. Set it and the cheap classifier decides first, with
@@ -70,6 +74,7 @@ export const DEFAULT_CONFIG: AgentConfig = {
   goal: '',
   model: 'qwen3-coder-ud-q4kxl:latest',
   baseURL: 'http://localhost:11434/api',
+  strategy: 'llm',
 };
 
 /** The stored value laid over the defaults; storage may hold a partial config or nothing. */
