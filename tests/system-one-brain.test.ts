@@ -4,7 +4,7 @@ import { ACTION_QUESTION, DONE_QUESTION, valueQuestionKey } from '../utils/syste
 import type { Brain, Decision } from '../utils/brain';
 import type { SystemOneAnswer } from '../utils/system-one';
 import { MAX_CHOICE_CRITERIA } from '../utils/system-one';
-import { loginScene, sceneOf, stateNode } from './fixtures/scene';
+import { actionNode, loginScene, perception, sceneOf, selectFormScene, selectNode, stateNode } from './fixtures/scene';
 
 const choice = (pick: string, confidence: number): SystemOneAnswer => ({
   type: 'choice',
@@ -222,5 +222,102 @@ describe('createGatedBrain', () => {
 
     expect(decision.decided).toBe(false);
     expect(slow).not.toHaveBeenCalled();
+  });
+});
+
+describe('playbooks', () => {
+  const memberAnswers = (confidences: [number, number, number] = [0.9, 0.8, 0.95]) => ({
+    [valueQuestionKey('s1')]: choice('b', confidences[0]),
+    [valueQuestionKey('s2')]: choice('d', confidences[1]),
+    [valueQuestionKey('s3')]: choice('e', confidences[2]),
+    [DONE_QUESTION]: { type: 'noul', noul: 0.01 } as SystemOneAnswer,
+  });
+  const batch = [
+    { kind: 'setState', nodeId: 's1', value: 'b' },
+    { kind: 'setState', nodeId: 's2', value: 'd' },
+    { kind: 'setState', nodeId: 's3', value: 'e' },
+    { kind: 'clickTrigger', nodeId: 'b1' },
+  ];
+  const askForm = (brain: ReturnType<typeof createSystemOneBrain>, scene = selectFormScene()) =>
+    brain({ scene, goal: 'Fill in the form and submit it.' });
+
+  it('emits every member then the commit in one tick, at the minimum confidence', async () => {
+    const { brain, fetchImpl } = brainWith({ [ACTION_QUESTION]: choice('click_submit', 0.97), ...memberAnswers() });
+    const decision = await askForm(brain);
+
+    expect(decision.actions).toEqual(batch);
+    expect(decision.confidence).toBeCloseTo(0.8);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('expands a pick of any member to the same batch', async () => {
+    const { brain } = brainWith({ [ACTION_QUESTION]: choice('choose_second', 0.7), ...memberAnswers() });
+    const decision = await askForm(brain);
+    expect(decision.actions).toEqual(batch);
+    expect(decision.confidence).toBeCloseTo(0.7);
+  });
+
+  it('sends the whole Scene to the slow brain when one member is unsure — never half a batch', async () => {
+    const { brain: fast } = brainWith({
+      [ACTION_QUESTION]: choice('click_submit', 0.97),
+      ...memberAnswers([0.9, 0.3, 0.95]),
+    });
+    const slow = slowBrain();
+    const decision = await createGatedBrain({ fast, slow, threshold: 0.6 })({
+      scene: selectFormScene(),
+      goal: 'Fill in the form and submit it.',
+    });
+
+    expect(slow).toHaveBeenCalledTimes(1);
+    expect(decision.via).toBe('system-one->ai-sdk (low confidence)');
+    expect(decision.confidence).toBeCloseTo(0.3);
+  });
+
+  it('drops back to the single action when a member answer is missing', async () => {
+    const { [valueQuestionKey('s3')]: _missing, ...answers } = memberAnswers();
+    const { brain } = brainWith({ [ACTION_QUESTION]: choice('choose_first', 0.9), ...answers });
+    const decision = await askForm(brain);
+    expect(decision.actions).toEqual([{ kind: 'setState', nodeId: 's1', value: 'b' }]);
+  });
+
+  it('never submits bare: a picked commit with an undecodable member goes to the slow brain', async () => {
+    const answers = { ...memberAnswers(), [valueQuestionKey('s2')]: choice('not_offered', 0.99) };
+    const { brain: fast } = brainWith({ [ACTION_QUESTION]: choice('click_submit', 0.97), ...answers });
+    const slow = slowBrain();
+    const decision = await createGatedBrain({ fast, slow, threshold: 0.6 })({
+      scene: selectFormScene(),
+      goal: 'Fill in the form and submit it.',
+    });
+
+    expect(slow).toHaveBeenCalledTimes(1);
+    expect(decision.via).toBe('system-one->ai-sdk (low confidence)');
+    expect(decision.confidence).toBe(0);
+  });
+
+  it('keeps the needsValue path when a free-text field shares the scope', async () => {
+    const scene = selectFormScene({}, stateNode({ id: 't1', name: 'Notes', relations: { container: 'f1' } }));
+    const { brain } = brainWith({ [ACTION_QUESTION]: choice('fill_notes', 0.95), ...memberAnswers() });
+    const decision = await askForm(brain, scene);
+    expect(decision.needsValue).toBe('t1');
+    expect(decision.actions).toEqual([]);
+  });
+
+  it('is exactly the single-action decision without a playbook', async () => {
+    const commit = actionNode({ id: 'b1', name: 'Submit', action: 'submit', relations: { container: 'f1' } });
+    const lone = sceneOf(selectNode('s1', 'First', 'f1', ['a', 'b']), commit);
+    const twoCommits = selectFormScene({}, { ...commit, id: 'b2', name: 'Submit later' });
+    const stalled = selectFormScene({ submit: { perception: perception({ stalled: true }) } });
+    const { brain } = brainWith({ [ACTION_QUESTION]: choice('choose_first', 0.9), ...memberAnswers() });
+
+    for (const scene of [lone, twoCommits, stalled]) {
+      expect(await askForm(brain, scene)).toEqual({
+        decided: true,
+        via: 'system-one',
+        satisfied: '',
+        remaining: '',
+        confidence: 0.9,
+        actions: [{ kind: 'setState', nodeId: 's1', value: 'b' }],
+      });
+    }
   });
 });

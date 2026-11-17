@@ -3,10 +3,20 @@ import {
   ACTION_QUESTION,
   DONE_QUESTION,
   buildActionQuestions,
+  buildPlaybooks,
   describeState,
   valueQuestionKey,
 } from '../utils/system-one-questions';
-import { actionNode, loginScene, perception, sceneOf, stateNode } from './fixtures/scene';
+import {
+  actionNode,
+  loginScene,
+  perception,
+  sceneOf,
+  selectFormScene,
+  selectNode,
+  stateNode,
+  structureNode,
+} from './fixtures/scene';
 import type { SystemOneQuestion } from '../utils/system-one';
 
 const choiceOf = (questions: Record<string, SystemOneQuestion>, key: string) => {
@@ -112,6 +122,117 @@ describe('buildActionQuestions', () => {
   it('describes current values in the criteria, so a done control is visibly done', () => {
     const built = buildActionQuestions(loginScene({ submitEnabled: true, email: 'alice@example.com' }))!;
     expect(choiceOf(built.questions, ACTION_QUESTION).criteria.fill_email_address).toContain('alice@example.com');
+  });
+});
+
+describe('buildPlaybooks', () => {
+  it('finds K enumerable controls and the one submit sharing a scope', () => {
+    const [playbook, ...rest] = buildPlaybooks(selectFormScene());
+    expect(rest).toEqual([]);
+    expect(playbook.scope).toBe('f1');
+    expect(playbook.commit).toBe('b1');
+    expect(playbook.members.map((m) => m.nodeId)).toEqual(['s1', 's2', 's3']);
+    // each member reuses the value question's own key and decoder
+    expect(playbook.members[0].decoder).toEqual({ key: valueQuestionKey('s1'), labels: { a: 'a', b: 'b' } });
+  });
+
+  it('keeps the control and its scope in every criterion, and is what the request carries', () => {
+    const built = buildActionQuestions(selectFormScene())!;
+    const [playbook] = built.playbooks;
+    const second = playbook.members[1];
+    expect(second.question.criteria.d).toBe('Set Second in Preferences to d.');
+    expect(built.questions[second.decoder.key]).toEqual(second.question);
+    expect(built.values.s2).toEqual(second.decoder);
+  });
+
+  it('accepts a single plain trigger as the commit when there is no submit', () => {
+    const scene = selectFormScene({ submit: { action: 'click' } });
+    expect(buildPlaybooks(scene).map((p) => p.commit)).toEqual(['b1']);
+  });
+
+  it('prefers the submit over other triggers in the scope', () => {
+    const scene = selectFormScene({}, actionNode({ id: 'b2', name: 'Reset', relations: { container: 'f1' } }));
+    expect(buildPlaybooks(scene).map((p) => p.commit)).toEqual(['b1']);
+  });
+
+  it('offers nothing when a free-text field shares the scope', () => {
+    const scene = selectFormScene({}, stateNode({ id: 't1', name: 'Notes', relations: { container: 'f1' } }));
+    expect(buildPlaybooks(scene)).toEqual([]);
+  });
+
+  it('offers nothing when two triggers could commit', () => {
+    const twoSubmits = selectFormScene(
+      {},
+      actionNode({ id: 'b2', name: 'Submit later', action: 'submit', relations: { container: 'f1' } }),
+    );
+    const twoClicks = selectFormScene(
+      { submit: { action: 'click' } },
+      actionNode({ id: 'b2', name: 'Other', relations: { container: 'f1' } }),
+    );
+    expect(buildPlaybooks(twoSubmits)).toEqual([]);
+    expect(buildPlaybooks(twoClicks)).toEqual([]);
+  });
+
+  it('offers nothing for a lone select', () => {
+    const scene = sceneOf(
+      structureNode({ id: 'f1' }),
+      selectNode('s1', 'First', 'f1', ['a', 'b']),
+      actionNode({ id: 'b1', name: 'Submit', action: 'submit', relations: { container: 'f1' } }),
+    );
+    expect(buildPlaybooks(scene)).toEqual([]);
+  });
+
+  it('offers nothing when the commit is stalled, disabled or hidden', () => {
+    for (const p of [{ stalled: true }, { disabled: true }, { visible: false }]) {
+      expect(buildPlaybooks(selectFormScene({ submit: { perception: perception(p) } }))).toEqual([]);
+    }
+  });
+
+  it('ignores an unreachable member rather than counting it', () => {
+    const scene = selectFormScene(
+      {},
+      stateNode({ id: 't1', name: 'Notes', relations: { container: 'f1' }, perception: perception({ disabled: true }) }),
+    );
+    expect(buildPlaybooks(scene).map((p) => p.members.length)).toEqual([3]);
+  });
+
+  it('offers nothing for nested scopes, inner or outer', () => {
+    const scene = selectFormScene(
+      {},
+      structureNode({ id: 'g1', role: 'group', landmark: 'group', relations: { container: 'f1' } }),
+      selectNode('s4', 'Fourth', 'g1', ['g', 'h']),
+      selectNode('s5', 'Fifth', 'g1', ['i', 'j']),
+      actionNode({ id: 'b2', name: 'Apply', relations: { container: 'g1' } }),
+    );
+    expect(buildPlaybooks(scene)).toEqual([]);
+  });
+
+  it('lets a nested scope of triggers only stand beside the batch', () => {
+    const scene = selectFormScene(
+      {},
+      structureNode({ id: 'l1', role: 'list', landmark: 'list', relations: { container: 'f1' } }),
+      actionNode({ id: 'a1', name: 'Elsewhere', action: 'navigate', href: '/x', relations: { container: 'l1' } }),
+    );
+    expect(buildPlaybooks(scene).map((p) => p.scope)).toEqual(['f1']);
+  });
+
+  it('grounds a member in its current value even when its scope is not in the Scene', () => {
+    const { f1: _scope, ...nodes } = selectFormScene().nodes;
+    const [playbook] = buildPlaybooks({ ...selectFormScene(), nodes });
+    expect(playbook.members[0].question.instructions).toBe(
+      'What should First hold (currently "a")? Keep it if it is already right.',
+    );
+    expect(playbook.members[0].question.criteria.b).toBe('Set First to b.');
+  });
+
+  it('falls back to the outline parent when no container is declared', () => {
+    const unscoped = (id: string, name: string) => ({ ...selectNode(id, name, '', ['a', 'b']), relations: {}, parent: 'p1' });
+    const scene = sceneOf(
+      unscoped('s1', 'First'),
+      unscoped('s2', 'Second'),
+      actionNode({ id: 'b1', name: 'Go', parent: 'p1' }),
+    );
+    expect(buildPlaybooks(scene).map((p) => p.scope)).toEqual(['p1']);
   });
 });
 
