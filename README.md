@@ -216,12 +216,10 @@ AI SDK brain alone, exactly as before.
 
 Everything that is not about being a browser extension (the Scene, projection,
 actuation, the loop, the brains, decision tracing) lives in
-[skene](https://github.com/gavmor/skene), a dependency pinned to a tag
-(`@gavmor/skene`, imported by subpath: `/core`, `/dom`, `/brains/ai-sdk`,
-`/brains/system-one`, `/tracing`). Bumping it means changing the tag in
-`package.json` **and** the commit in `pnpm-workspace.yaml`'s `allowBuilds`
-(pnpm allowlists a git dependency's build per commit). To develop both at once:
-`pnpm link ../skene`.
+[skene](https://github.com/gavmor/skene), a dependency on a GitHub Release's
+built tarball (`@gavmor/skene`, imported by subpath: `/core`, `/dom`,
+`/brains/ai-sdk`, `/brains/system-one`, `/tracing`). Bumping it means changing
+the release URL in `package.json`. To develop both at once: `pnpm link ../skene`.
 
 ```
 entrypoints/

@@ -213,8 +213,8 @@ importers:
         specifier: ^3.3.0
         version: 3.3.0(@ai-sdk/otel@1.0.137(zod@4.6.5))(@opentelemetry/api@1.9.1)(@opentelemetry/semantic-conventions@1.43.0)(ai@7.0.137(zod@4.6.5))
       '@gavmor/skene':
-        specifier: github:gavmor/skene#v0.1.0
-        version: https://codeload.github.com/gavmor/skene/tar.gz/6da2ee8d142ac4a62413ad5f6a16d6f6feaaf398(@arizeai/openinference-core@2.8.0)(@arizeai/openinference-semantic-conventions@2.14.0)(@opentelemetry/api@1.9.1)(@opentelemetry/semantic-conventions@1.43.0)(ai@7.0.137(zod@4.6.5))
+        specifier: https://github.com/gavmor/skene/releases/download/v0.1.1/gavmor-skene-0.1.1.tgz
+        version: https://github.com/gavmor/skene/releases/download/v0.1.1/gavmor-skene-0.1.1.tgz(@arizeai/openinference-core@2.8.0)(@arizeai/openinference-semantic-conventions@2.14.0)(@opentelemetry/api@1.9.1)(@opentelemetry/semantic-conventions@1.43.0)(ai@7.0.137(zod@4.6.5))
       '@opentelemetry/api':
         specifier: ^1.9.1
         version: 1.9.1
@@ -592,9 +592,9 @@ packages:
       '@noble/hashes':
         optional: true
 
-  '@gavmor/skene@https://codeload.github.com/gavmor/skene/tar.gz/6da2ee8d142ac4a62413ad5f6a16d6f6feaaf398':
-    resolution: {gitHosted: true, integrity: sha512-AghGp5GDFI/s5YquRY0kJX4EjXDexUFncKje+pTST91shfSxuoUWIBFzpSEPL/xBv8uXh5q3wefmerW363HGUw==, tarball: https://codeload.github.com/gavmor/skene/tar.gz/6da2ee8d142ac4a62413ad5f6a16d6f6feaaf398}
-    version: 0.1.0
+  '@gavmor/skene@https://github.com/gavmor/skene/releases/download/v0.1.1/gavmor-skene-0.1.1.tgz':
+    resolution: {integrity: sha512-J+Ax0K4j4X1KySm4y2SoocUUiwtTOvFsocY/A67Rltburf7iCIQ/G62P35PHxtc4FlOxCR66cp6VAMUc7W33xg==, tarball: https://github.com/gavmor/skene/releases/download/v0.1.1/gavmor-skene-0.1.1.tgz}
+    version: 0.1.1
     peerDependencies:
       '@arizeai/openinference-core': ^2.8.0
       '@arizeai/openinference-semantic-conventions': ^2.14.0
@@ -3163,7 +3163,7 @@ snapshots:
 
   '@exodus/bytes@1.15.0': {}
 
-  '@gavmor/skene@https://codeload.github.com/gavmor/skene/tar.gz/6da2ee8d142ac4a62413ad5f6a16d6f6feaaf398(@arizeai/openinference-core@2.8.0)(@arizeai/openinference-semantic-conventions@2.14.0)(@opentelemetry/api@1.9.1)(@opentelemetry/semantic-conventions@1.43.0)(ai@7.0.137(zod@4.6.5))':
+  '@gavmor/skene@https://github.com/gavmor/skene/releases/download/v0.1.1/gavmor-skene-0.1.1.tgz(@arizeai/openinference-core@2.8.0)(@arizeai/openinference-semantic-conventions@2.14.0)(@opentelemetry/api@1.9.1)(@opentelemetry/semantic-conventions@1.43.0)(ai@7.0.137(zod@4.6.5))':
     dependencies:
       aria-query: 5.3.2
       dom-accessibility-api: 0.7.1

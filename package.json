@@ -34,7 +34,7 @@
     "@arizeai/openinference-core": "^2.8.0",
     "@arizeai/openinference-semantic-conventions": "^2.14.0",
     "@arizeai/openinference-vercel": "^3.3.0",
-    "@gavmor/skene": "github:gavmor/skene#v0.1.0",
+    "@gavmor/skene": "https://github.com/gavmor/skene/releases/download/v0.1.1/gavmor-skene-0.1.1.tgz",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/exporter-trace-otlp-proto": "^0.223.0",
     "@opentelemetry/resources": "^2.12.0",

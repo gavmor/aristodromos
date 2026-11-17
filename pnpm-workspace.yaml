@@ -1,6 +1,4 @@
 allowBuilds:
-  # git-hosted deps are allowlisted per commit: update with each skene tag (v0.1.0)
-  '@gavmor/skene@https://codeload.github.com/gavmor/skene/tar.gz/6da2ee8d142ac4a62413ad5f6a16d6f6feaaf398': true
   esbuild: true
   lefthook: true
   spawn-sync: true
