@@ -22,7 +22,13 @@ export default defineContentScript({
     let projector: SceneProjector | undefined;
 
     const onPlan = (message: DownMessage): void => {
-      if (projector) handlePlan(projector, message, (patch) => channel.send(patch), (line) => console.log(line));
+      if (projector)
+        handlePlan(
+          projector,
+          message,
+          (patch) => channel.send(patch),
+          (line) => console.log(line),
+        );
     };
 
     const channel = new ContentPort({

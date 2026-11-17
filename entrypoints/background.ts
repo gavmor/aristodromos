@@ -11,33 +11,34 @@
 // show the Scene, but never acts. Goal, brain and pause live in
 // `browser.storage.local`; this worker follows `storage.onChanged`. A panel
 // that inspects a tab also gets that tab's Scene stream, forwarded as it arrives.
-import { createOllama } from 'ollama-ai-provider-v2';
+
+import { aiSdkBrain, createAiSdkValueFiller } from '@gavmor/skene/brains/ai-sdk';
+import { createSystemOneBrain } from '@gavmor/skene/brains/system-one';
 import {
   AgentLoop,
+  type Brain,
   createGatedBrain,
   nothingAfforded,
-  type Brain,
   type PendingDecision,
   type ScenePatch,
   type TurnRecord,
 } from '@gavmor/skene/core';
-import { aiSdkBrain, createAiSdkValueFiller } from '@gavmor/skene/brains/ai-sdk';
-import { createSystemOneBrain } from '@gavmor/skene/brains/system-one';
 import { JEV_SYSTEM_ONE, traceDecisions } from '@gavmor/skene/tracing';
-import { tracingFor } from '../utils/tracing';
+import { createOllama } from 'ollama-ai-provider-v2';
+import type { Browser } from 'wxt/browser';
 import {
+  type AgentConfig,
   CONFIG_KEY,
   DECIDE_NOW_KEY,
   ENABLED_TABS_KEY,
+  enabledTabsOf,
   PAUSED_KEY,
   PENDING_KEY,
-  TURN_LOG_KEY,
-  enabledTabsOf,
   resolveConfig,
-  type AgentConfig,
+  TURN_LOG_KEY,
 } from '../utils/agent-config';
-import type { Browser } from 'wxt/browser';
 import { AGENT_PORT, INSPECT_PORT, type InspectMessage, type InspectRequest } from '../utils/extension-protocol';
+import { tracingFor } from '../utils/tracing';
 
 const TURN_LOG_CAP = 200;
 
@@ -62,7 +63,8 @@ function appendTurn(turn: TurnRecord): void {
 function setBadge(tabId: number, enabled: boolean, paused: boolean): void {
   // A tab can close between the decision and the call; its badge went with it.
   void browser.action.setBadgeText({ tabId, text: enabled ? (paused ? '⏸' : '▶') : '' }).catch(() => {});
-  if (enabled) void browser.action.setBadgeBackgroundColor({ tabId, color: paused ? '#666666' : '#2e7d32' }).catch(() => {});
+  if (enabled)
+    void browser.action.setBadgeBackgroundColor({ tabId, color: paused ? '#666666' : '#2e7d32' }).catch(() => {});
 }
 
 /**

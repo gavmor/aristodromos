@@ -9,12 +9,13 @@
 // run writes a JSONL turn log and exits non-zero if the loop did not converge.
 //
 // Node 26 strips types natively, so this needs no build step of its own.
-import { chromium, type BrowserContext, type Worker } from 'playwright-core';
+
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
-import { readFile, mkdir, writeFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { type BrowserContext, chromium, type Worker } from 'playwright-core';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -41,8 +42,7 @@ declare const chrome: {
   };
 };
 
-const GOAL =
-  'Sign in as alice@example.com with the password hunter2, and remember this device.';
+const GOAL = 'Sign in as alice@example.com with the password hunter2, and remember this device.';
 const EXPECT_EMAIL = 'alice@example.com';
 const DEADLINE_MS = Number(process.env.E2E_DEADLINE_MS ?? 240_000);
 
@@ -87,11 +87,7 @@ async function main(): Promise<void> {
   const context = await chromium.launchPersistentContext(profile, {
     executablePath: process.env.CHROMIUM_PATH ?? '/usr/bin/chromium',
     headless: true,
-    args: [
-      `--disable-extensions-except=${EXTENSION}`,
-      `--load-extension=${EXTENSION}`,
-      '--no-sandbox',
-    ],
+    args: [`--disable-extensions-except=${EXTENSION}`, `--load-extension=${EXTENSION}`, '--no-sandbox'],
   });
 
   try {
@@ -154,8 +150,8 @@ async function main(): Promise<void> {
     })) as TurnRecord[];
 
     await mkdir(EVIDENCE, { recursive: true });
-    await writeFile(path.join(EVIDENCE, 'turns.jsonl'), turns.map((t) => JSON.stringify(t)).join('\n') + '\n');
-    await writeFile(path.join(EVIDENCE, 'content.log'), pageConsole.join('\n') + '\n');
+    await writeFile(path.join(EVIDENCE, 'turns.jsonl'), `${turns.map((t) => JSON.stringify(t)).join('\n')}\n`);
+    await writeFile(path.join(EVIDENCE, 'content.log'), `${pageConsole.join('\n')}\n`);
     await page.screenshot({ path: path.join(EVIDENCE, 'final.png'), fullPage: true });
 
     console.log('\n[e2e] ───────── turn log ─────────');

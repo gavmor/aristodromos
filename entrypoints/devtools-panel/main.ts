@@ -6,20 +6,20 @@
 // many times a second, so it streams over an INSPECT_PORT instead, and the
 // panel folds it into its own replica exactly as the background does.
 import '@andypf/json-viewer';
+import { type PendingDecision, type PlanAction, TabScene, type TurnRecord } from '@gavmor/skene/core';
 import {
+  type AgentConfig,
   CONFIG_KEY,
   DECIDE_NOW_KEY,
   ENABLED_TABS_KEY,
+  enabledTabsOf,
   PAUSED_KEY,
   PENDING_KEY,
+  resolveConfig,
   SUGGESTED_SYSTEM_ONE,
   SUGGESTED_TRACING,
   TURN_LOG_KEY,
-  enabledTabsOf,
-  resolveConfig,
-  type AgentConfig,
 } from '../../utils/agent-config';
-import { TabScene, type PendingDecision, type PlanAction, type TurnRecord } from '@gavmor/skene/core';
 import { INSPECT_PORT, type InspectMessage, type InspectRequest } from '../../utils/extension-protocol';
 
 function el<T extends HTMLElement>(id: string): T {
@@ -340,7 +340,8 @@ function inspect(): void {
       fresh = false;
     }
     const message = raw as InspectMessage;
-    const changed = 'gone' in message ? replica.drop(message.frameId) : replica.ingest(message.frameId, message.message);
+    const changed =
+      'gone' in message ? replica.drop(message.frameId) : replica.ingest(message.frameId, message.message);
     if (!changed || renderQueued) return;
     renderQueued = true;
     window.setTimeout(renderScene, 200);
