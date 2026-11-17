@@ -7,6 +7,7 @@
 // panel folds it into its own replica exactly as the background does.
 import '@andypf/json-viewer';
 import { type PendingDecision, type PlanAction, TabScene, type TurnRecord } from '@gavmor/skene/core';
+import { trainingJsonl } from '@gavmor/skene/training';
 import {
   type AgentConfig,
   CONFIG_KEY,
@@ -21,6 +22,7 @@ import {
   TURN_LOG_KEY,
 } from '../../utils/agent-config';
 import { INSPECT_PORT, type InspectMessage, type InspectRequest } from '../../utils/extension-protocol';
+import { type LoggedTurn, turnsOf, verifiedRowsOf } from '../../utils/turn-log';
 
 function el<T extends HTMLElement>(id: string): T {
   const found = document.getElementById(id);
@@ -56,6 +58,8 @@ const ui = {
   saveNote: el<HTMLSpanElement>('save-note'),
   allTabs: el<HTMLInputElement>('all-tabs'),
   clearLog: el<HTMLButtonElement>('clear-log'),
+  exportRun: el<HTMLButtonElement>('export-run'),
+  exportNote: el<HTMLParagraphElement>('export-note'),
   turnRows: el<HTMLTableSectionElement>('turn-rows'),
   noTurns: el<HTMLParagraphElement>('no-turns'),
   sceneMeta: el<HTMLSpanElement>('scene-meta'),
@@ -70,7 +74,7 @@ document.documentElement.dataset.theme = dark ? 'dark' : 'light';
 let paused = false;
 /** the agent is switched on for the inspected tab */
 let onHere = false;
-let turns: TurnRecord[] = [];
+let turns: LoggedTurn[] = [];
 /** the inspected tab's most recent turn */
 let lastHere: TurnRecord | undefined;
 /** Unsaved edits win over a config change arriving from elsewhere. */
@@ -259,7 +263,7 @@ function renderTurns(): void {
 }
 
 function setTurns(stored: unknown): void {
-  turns = Array.isArray(stored) ? (stored as TurnRecord[]) : [];
+  turns = turnsOf(stored);
   lastHere = turns.findLast((turn) => turn.tabId === inspectedTabId);
   renderStatus();
   renderTurns();
@@ -267,7 +271,28 @@ function setTurns(stored: unknown): void {
 }
 
 ui.allTabs.addEventListener('change', renderTurns);
+// The person watching is the verifier: only they can say the run reached its
+// goal. Clear the log before a run so this tab's turns are that run alone.
+ui.exportRun.addEventListener('click', () => {
+  const runId = `tab${inspectedTabId}-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+  const rows = verifiedRowsOf(turns, inspectedTabId, runId);
+  ui.exportNote.hidden = false;
+  if (rows.length === 0) {
+    ui.exportNote.textContent =
+      'No training rows: only System One turns whose plan moved the page count, and this tab has none.';
+    return;
+  }
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([trainingJsonl(rows)], { type: 'application/jsonl' }));
+  link.download = `${runId}.jsonl`;
+  link.click();
+  // Revoked once the download has had its turn to read it.
+  setTimeout(() => URL.revokeObjectURL(link.href), 60_000);
+  ui.exportNote.textContent = `Exported ${rows.length} training rows as ${link.download}.`;
+});
+
 ui.clearLog.addEventListener('click', () => {
+  ui.exportNote.hidden = true;
   void browser.storage.local.set({ [TURN_LOG_KEY]: [] });
 });
 

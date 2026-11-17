@@ -75,8 +75,16 @@
       <div class="section-head">
         <h2>Turns</h2>
         <label class="inline"><input id="all-tabs" type="checkbox" /> all tabs</label>
+        <button
+          id="export-run"
+          type="button"
+          title="This tab's logged run reached its goal: download its System One answers as Jeff training rows (JSONL)"
+        >
+          Run succeeded: export
+        </button>
         <button id="clear-log" type="button">Clear log</button>
       </div>
+      <p id="export-note" class="muted" hidden></p>
       <table>
         <thead>
           <tr>

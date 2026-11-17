@@ -15,7 +15,9 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { trainingJsonl } from '@gavmor/skene/training';
 import { type BrowserContext, chromium, type Worker } from 'playwright-core';
+import { type LoggedTurn, verifiedRowsOf } from '../utils/turn-log.ts';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -45,18 +47,6 @@ declare const chrome: {
 const GOAL = 'Sign in as alice@example.com with the password hunter2, and remember this device.';
 const EXPECT_EMAIL = 'alice@example.com';
 const DEADLINE_MS = Number(process.env.E2E_DEADLINE_MS ?? 240_000);
-
-interface TurnRecord {
-  tick: number;
-  url: string;
-  opsSinceLastTurn: number;
-  afforded: { state: string[]; trigger: string[] };
-  satisfied: string;
-  remaining: string;
-  actions: { kind: string; nodeId: string; value?: unknown }[];
-  ms: number;
-  error?: string;
-}
 
 async function serveFixture(): Promise<{ url: string; close: () => Promise<void> }> {
   const html = await readFile(path.join(HERE, 'fixtures', 'login.html'));
@@ -103,6 +93,16 @@ async function main(): Promise<void> {
       model: process.env.OLLAMA_MODEL ?? 'qwen3-coder-ud-q4kxl:latest',
       baseURL: process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434/api',
       ...(collector ? { tracing: { endpoint: collector, project: 'aristodromos-e2e' } } : {}),
+      // JEV_BASE_URL puts System One in front, so the run can also yield training rows.
+      ...(process.env.JEV_BASE_URL
+        ? {
+            systemOne: {
+              baseURL: process.env.JEV_BASE_URL,
+              model: process.env.JEV_MODEL ?? 'autojev',
+              threshold: Number(process.env.JEV_THRESHOLD ?? 0.6),
+            },
+          }
+        : {}),
     };
     await worker.evaluate(async (config) => {
       await chrome.storage.local.set({ agentConfig: config, turnLog: [] });
@@ -147,7 +147,7 @@ async function main(): Promise<void> {
     const turns = (await worker.evaluate(async () => {
       const stored = await chrome.storage.local.get('turnLog');
       return stored.turnLog ?? [];
-    })) as TurnRecord[];
+    })) as LoggedTurn[];
 
     await mkdir(EVIDENCE, { recursive: true });
     await writeFile(path.join(EVIDENCE, 'turns.jsonl'), `${turns.map((t) => JSON.stringify(t)).join('\n')}\n`);
@@ -188,6 +188,18 @@ async function main(): Promise<void> {
     }
     if (!multiStep) throw new Error('converged, but within a single turn — no perceive/act cycle demonstrated');
     console.log('\n[e2e] PASS — perceive -> decide -> actuate -> re-perceive closed the loop.');
+
+    // The page's own post-conditions are the verifier: only a run that met the
+    // whole goal (signed in AND remembered) may become training data.
+    if (remembered && turns[0]?.tabId !== undefined) {
+      const rows = verifiedRowsOf(turns, turns[0].tabId, `e2e-${new Date().toISOString().replace(/[:.]/g, '-')}`);
+      await writeFile(path.join(EVIDENCE, 'training.jsonl'), trainingJsonl(rows));
+      console.log(
+        `[e2e] training rows: ${rows.length} (System One turns that moved the page) -> evidence/training.jsonl`,
+      );
+    } else {
+      console.log('[e2e] no training export: the goal was not fully met (remember-device unset)');
+    }
   } finally {
     await context.close();
     await fixture.close();
