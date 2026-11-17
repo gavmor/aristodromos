@@ -216,6 +216,20 @@ describe('buildPlaybooks', () => {
     expect(buildPlaybooks(scene).map((p) => p.scope)).toEqual(['f1']);
   });
 
+  it('lets a form stand inside an enclosing scope that holds triggers only', () => {
+    const base = selectFormScene();
+    const scene = {
+      ...base,
+      nodes: {
+        ...base.nodes,
+        m1: structureNode({ id: 'm1', role: 'main', landmark: 'main' }),
+        f1: { ...base.nodes.f1, relations: { container: 'm1' } },
+        a1: actionNode({ id: 'a1', name: 'Back', action: 'navigate', href: '/x', relations: { container: 'm1' } }),
+      },
+    };
+    expect(buildPlaybooks(scene).map((p) => p.scope)).toEqual(['f1']);
+  });
+
   it('grounds a member in its current value even when its scope is not in the Scene', () => {
     const { f1: _scope, ...nodes } = selectFormScene().nodes;
     const [playbook] = buildPlaybooks({ ...selectFormScene(), nodes });

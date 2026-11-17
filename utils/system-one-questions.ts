@@ -211,7 +211,9 @@ export function buildPlaybooks(scene: Scene): Playbook[] {
   // neither does. A nested scope of triggers only (a list of links) sets
   // nothing, so it leaves the outer scope's batch unambiguous.
   const nested = new Set(
-    [...chains].flatMap(([node, chain]) => (isStateNode(node) && chain.slice(1).some((k) => byScope.has(k)) ? chain : [])),
+    [...chains].flatMap(([node, chain]) =>
+      isStateNode(node) && chain.slice(1).some((k) => byScope.get(k)?.some(isStateNode)) ? chain : [],
+    ),
   );
 
   const playbooks: Playbook[] = [];
