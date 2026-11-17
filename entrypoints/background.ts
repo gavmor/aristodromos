@@ -21,7 +21,6 @@ import {
   nothingAfforded,
   type PendingDecision,
   type ScenePatch,
-  type TurnRecord,
 } from '@gavmor/skene/core';
 import { JEV_SYSTEM_ONE, traceDecisions } from '@gavmor/skene/tracing';
 import { createOllama } from 'ollama-ai-provider-v2';
@@ -39,6 +38,7 @@ import {
 } from '../utils/agent-config';
 import { AGENT_PORT, INSPECT_PORT, type InspectMessage, type InspectRequest } from '../utils/extension-protocol';
 import { tracingFor } from '../utils/tracing';
+import { type LoggedTurn, turnsOf, withOutcome } from '../utils/turn-log';
 
 const TURN_LOG_CAP = 200;
 
@@ -50,12 +50,11 @@ async function readConfig(): Promise<AgentConfig> {
   return resolveConfig(stored[CONFIG_KEY]);
 }
 
-function appendTurn(turn: TurnRecord): void {
+/** One read-modify-write of the turn log, queued behind the others. */
+function updateLog(change: (log: LoggedTurn[]) => LoggedTurn[]): void {
   logWrites = logWrites.then(async () => {
     const stored = await browser.storage.local.get(TURN_LOG_KEY);
-    const log = (Array.isArray(stored[TURN_LOG_KEY]) ? stored[TURN_LOG_KEY] : []) as TurnRecord[];
-    log.push(turn);
-    await browser.storage.local.set({ [TURN_LOG_KEY]: log.slice(-TURN_LOG_CAP) });
+    await browser.storage.local.set({ [TURN_LOG_KEY]: change(turnsOf(stored[TURN_LOG_KEY])).slice(-TURN_LOG_CAP) });
   });
 }
 
@@ -153,8 +152,9 @@ export default defineBackground(() => {
       record: (turn) => {
         const stamped = { ...turn, tabId };
         console.log(`[agent] turn ${turn.tick}: ${JSON.stringify(stamped)}`);
-        appendTurn(stamped);
+        updateLog((log) => [...log, stamped]);
       },
+      outcome: (outcome) => updateLog((log) => withOutcome(log, tabId, outcome)),
       pending: (decision) => {
         if (decision) pending.set(tabId, { ...decision, tabId });
         else pending.delete(tabId);
