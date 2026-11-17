@@ -254,9 +254,9 @@ e2e/
 ## CI and releases
 
 `.github/workflows/ci.yml` runs on every pull request and every push to `main`:
-a frozen-lockfile install, then `pnpm typecheck`, `pnpm test`, `pnpm cpd`,
-`pnpm build` and `pnpm zip`. `pnpm e2e` and `pnpm probe` are not run in CI; they
-need a local Ollama, Chromium and Jev server.
+a frozen-lockfile install, then `pnpm typecheck`, `pnpm lint`, `pnpm test`,
+`pnpm cpd`, `pnpm build` and `pnpm zip`. `pnpm e2e` is not run in CI; it needs a
+local Ollama and Chromium (skene's `pnpm probe` also needs a Jev server).
 
 Each green push to `main` publishes a GitHub Release with the extension zip
 attached. Tags are `build-<N>`, where `N` is the number of commits reachable
