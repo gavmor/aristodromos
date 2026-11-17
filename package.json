@@ -1,7 +1,7 @@
 {
-  "name": "aristrodomos",
+  "name": "aristodromos",
   "version": "1.0.0",
-  "description": "",
+  "description": "A browser extension whose agent pursues a goal on the web: it reads the page, decides, acts, and adapts.",
   "scripts": {
     "dev": "wxt",
     "build": "wxt build",
