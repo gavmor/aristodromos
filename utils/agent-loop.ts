@@ -45,7 +45,7 @@ export class AgentLoop {
   private opsSinceLastTurn = 0;
   private paused = false;
   private stopped = false;
-  /** the tick budget ran out; only a new goal (`retarget`) lifts it */
+  /** the tick budget ran out; a new goal (`retarget`) or a new document lifts it */
   private exhausted = false;
   /** the current Scene was already decided on, came to nothing to do, and has not moved since */
   private settled = false;
@@ -90,7 +90,10 @@ export class AgentLoop {
     const sameDocument = this.tab.documentOf(frameId) === (message.kind === 'snapshot' ? message.scene.documentId : message.documentId);
     if (message.kind === 'snapshot') {
       // A frame on a new document is a new world: the budget starts over.
-      if (!sameDocument) this.tick = 0;
+      if (!sameDocument) {
+        this.tick = 0;
+        this.exhausted = false;
+      }
       this.opsSinceLastTurn = 0;
     } else {
       this.opsSinceLastTurn += message.ops.length;

@@ -8,7 +8,7 @@
 // The Port is reopened whenever the background drops it (service-worker
 // eviction, back/forward cache); see ContentPort.
 import { SceneProjector } from '../utils/scene-projector';
-import { applyPlan, didMove, summarize } from '../utils/reconciler';
+import { handlePlan } from '../utils/plan-handler';
 import { ContentPort } from '../utils/content-port';
 import { AGENT_PORT, type DownMessage } from '../utils/wire';
 
@@ -22,32 +22,7 @@ export default defineContentScript({
     let projector: SceneProjector | undefined;
 
     const onPlan = (message: DownMessage): void => {
-      const active = projector;
-      if (!active) return;
-      if (message.kind === 'idle') {
-        console.log(`[agent] tick ${message.tick} idle: ${message.reason}`);
-        return;
-      }
-      // A plan for a document we have navigated away from is discarded; the
-      // snapshot for the new document is already on the wire.
-      if (message.documentId !== active.current.documentId) {
-        console.log(`[agent] tick ${message.tick} dropped: plan for a stale document`);
-        return;
-      }
-      const results = applyPlan(message.actions, {
-        resolve: (id) => active.elementFor(id),
-        nodeOf: (id) => active.nodeOf(id),
-      });
-      console.log(`[agent] tick ${message.tick} remaining=${JSON.stringify(message.remaining)} -> ${summarize(results)}`);
-
-      // The plan changed nothing, so the projector has nothing to report, so the
-      // background would hear silence and conclude we are finished. We are not —
-      // it stalled. Re-offer the same Scene and let it decide again; the tick
-      // budget bounds how long it may keep stalling.
-      if (!didMove(results)) {
-        console.log(`[agent] tick ${message.tick} moved nothing — re-offering the scene`);
-        channel.send(active.snapshot());
-      }
+      if (projector) handlePlan(projector, message, (patch) => channel.send(patch));
     };
 
     const channel = new ContentPort({

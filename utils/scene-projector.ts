@@ -365,6 +365,9 @@ export class SceneProjector {
       // and a stylesheet changes the rules themselves: what is rendered must be
       // re-checked everywhere, not just where the record points.
       if (rec.type === 'attributes') this.visibilityStale = true;
+      // A dialog opens and closes by attribute (`open`, `role`, `aria-modal`) as
+      // often as by insertion; either way what sits behind it changes.
+      if (rec.type === 'attributes' && rec.target instanceof Element && isDialogEl(rec.target)) modalChanged = true;
       if ([...Array.from(rec.addedNodes), ...Array.from(rec.removedNodes)].some(isStylesheet)) this.visibilityStale = true;
       // A record names only the ROOT of an added or removed subtree. Pages that
       // render a whole section at once (a story passage, a framework re-render)
