@@ -24,7 +24,7 @@ export interface Harness {
   pageValue(name: string): Promise<unknown>;
   turnLog(): Promise<unknown[]>;
   screenshot(file: string): Promise<void>;
-  /** the extension's `[agent]` console lines and any errors, so far */
+  /** what the browser lets us read of the extension's console: see each harness */
   consoleLines(): Promise<string[]>;
   close(): Promise<void>;
 }
@@ -145,20 +145,16 @@ export async function firefoxHarness(zip: string): Promise<Harness> {
   };
 
   return {
-    // Firefox keeps every context's console (content scripts, the background
-    // page) in one service, readable from the privileged context.
+    // Firefox: the extension's errors (Services.console, readable from the
+    // privileged context). Its console.log output is not exposed to WebDriver,
+    // so the `[agent]` lines are Chromium-only.
     consoleLines: async () => {
       await driver.setContext(firefox.Context.CHROME);
       try {
-        // console.log calls live in ConsoleAPIStorage; errors in Services.console.
         return (await driver.executeScript(
-          `const logged = Cc['@mozilla.org/consoleAPI-storage;1'].getService(Ci.nsIConsoleAPIStorage).getEvents()
-             .filter((e) => String(e.filename ?? '').startsWith('moz-extension://'))
-             .map((e) => (e.arguments ?? []).map(String).join(' '));
-           const errors = Services.console.getMessageArray()
+          `return Services.console.getMessageArray()
              .map((m) => m.message ?? String(m))
-             .filter((line) => line.includes('moz-extension://') && /error|exception/i.test(line));
-           return [...logged.filter((line) => line.startsWith('[agent]')), ...errors];`,
+             .filter((line) => line.includes('moz-extension://') && /error|exception/i.test(line));`,
         )) as string[];
       } finally {
         await driver.setContext(firefox.Context.CONTENT);
