@@ -17,7 +17,7 @@
 import { TabScene, splitNodeId, type ComposedScene } from './tab-scene';
 import { buildActionSchema, type PlanAction } from './action-schema';
 import type { Decision } from './brain';
-import type { Scene, ScenePatch } from './scene';
+import type { NodeId, Scene, ScenePatch } from './scene';
 import type { DownMessage, PendingDecision, TurnRecord } from './wire';
 
 export interface AgentLoopDeps {
@@ -51,6 +51,18 @@ export class AgentLoop {
   private settled = false;
   /** bumps on every Scene change, to tell whether a decision's Scene is still current */
   private revision = 0;
+  /**
+   * The last plan sent, until the page answers it. Any patch op is an answer; a
+   * same-document snapshot with no op before it is the content script saying
+   * "nothing moved" (see content.ts).
+   */
+  private awaiting: { documentId: string; triggers: NodeId[] } | undefined;
+  /**
+   * Triggers that were activated on THIS page and changed nothing. Episodic
+   * memory scoped to one unchanged Scene: any op or new document forgets it,
+   * because a page that moved may have made the link live.
+   */
+  private stalled = new Set<NodeId>();
 
   constructor(private deps: AgentLoopDeps) {}
 
@@ -75,14 +87,26 @@ export class AgentLoop {
   /** Fold one frame's up-edge message in and re-arm the settle timer. */
   ingest(message: ScenePatch, frameId = 0): void {
     if (this.stopped) return;
+    const sameDocument = this.tab.documentOf(frameId) === (message.kind === 'snapshot' ? message.scene.documentId : message.documentId);
     if (message.kind === 'snapshot') {
       // A frame on a new document is a new world: the budget starts over.
-      if (this.tab.documentOf(frameId) !== message.scene.documentId) this.tick = 0;
+      if (!sameDocument) this.tick = 0;
       this.opsSinceLastTurn = 0;
     } else {
       this.opsSinceLastTurn += message.ops.length;
     }
     if (!this.tab.ingest(frameId, message)) return;
+    if (message.kind === 'patch' ? message.ops.length > 0 : !sameDocument) {
+      this.awaiting = undefined;
+      this.stalled.clear();
+    } else if (message.kind === 'snapshot' && !message.settled) {
+      const awaiting = this.awaiting;
+      if (awaiting && awaiting.documentId === this.tab.current?.documentId) {
+        // The plan came back unanswered: this frame's share of it did nothing.
+        this.markStalled(awaiting.triggers.filter((id) => splitNodeId(id)?.frameId === frameId));
+        this.awaiting = undefined;
+      }
+    }
     this.changed();
   }
 
@@ -102,6 +126,19 @@ export class AgentLoop {
     this.disarm();
     clearTimeout(this.noEffect);
     this.inFlight?.abort();
+  }
+
+  private markStalled(triggers: NodeId[]): void {
+    for (const id of triggers) this.stalled.add(id);
+  }
+
+  /** The Scene as the brain should see it: dead triggers carry `stalled`. */
+  private withStalled(scene: ComposedScene): ComposedScene {
+    const dead = [...this.stalled].filter((id) => scene.nodes[id]);
+    if (dead.length === 0) return scene;
+    const nodes = { ...scene.nodes };
+    for (const id of dead) nodes[id] = { ...nodes[id], perception: { ...nodes[id].perception, stalled: true } };
+    return { ...scene, nodes };
   }
 
   private changed(): void {
@@ -130,8 +167,9 @@ export class AgentLoop {
 
   private async settle(): Promise<void> {
     this.timer = undefined;
-    const scene = this.tab.current;
-    if (this.stopped || this.exhausted || this.paused || this.settled || !scene) return;
+    const current = this.tab.current;
+    if (this.stopped || this.exhausted || this.paused || this.settled || !current) return;
+    const scene = this.withStalled(current);
     // A decision is already running; the page moved under it. Let it finish —
     // its plan is still convergent — and re-evaluate on the next quiet window.
     if (this.inFlight) {
@@ -205,9 +243,14 @@ export class AgentLoop {
       // that ignores synthetic events. The page then stays silent, and silence
       // used to idle the loop for good. Decide again instead, within the budget.
       const sentAt = this.revision;
+      const triggers = decision.actions.filter((a) => a.kind === 'clickTrigger').map((a) => a.nodeId);
+      this.awaiting = { documentId: scene.documentId, triggers };
       clearTimeout(this.noEffect);
       this.noEffect = setTimeout(() => {
-        if (this.revision === sentAt) this.rearm();
+        if (this.revision !== sentAt) return;
+        this.awaiting = undefined;
+        this.markStalled(triggers);
+        this.rearm();
       }, this.deps.noEffectMs ?? 6000);
       return;
     }

@@ -53,6 +53,13 @@ export interface Perception {
   focused: boolean;
   /** behind an open modal dialog -> currently unreachable */
   inertByModal: boolean;
+  /**
+   * Set by the background loop, never by the projector: this trigger was
+   * activated on exactly this page and changed nothing (a dead link). It is
+   * withheld from the action set until the page moves, so a memoryless brain
+   * cannot pick it again.
+   */
+  stalled?: boolean;
   /** optional geometry; churns on scroll, so opt-in */
   bbox?: Rect;
 }

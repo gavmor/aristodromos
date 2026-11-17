@@ -72,7 +72,7 @@ export const isActionNode = (n: SceneNode): n is ActionNode => n.category === 'a
  * Links whose handler is an `onclick` (with `href="#"`) are unaffected.
  */
 export function isReachable(node: SceneNode): boolean {
-  if (node.perception.disabled || node.perception.inertByModal || !node.perception.visible) return false;
+  if (node.perception.disabled || node.perception.stalled || node.perception.inertByModal || !node.perception.visible) return false;
   return !(isActionNode(node) && node.href !== undefined && isScriptHref(node.href));
 }
 
