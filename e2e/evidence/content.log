@@ -1,4 +1,3 @@
-[agent] tick 1 remaining="Email address: alice@example.com, Password: hunter2, Remember this device: true" -> setState(n6)=applied
-[agent] tick 2 remaining="Set password to 'hunter2' and check 'Remember this device'" -> setState(n7)=applied setState(n8)=applied
+[agent] tick 1 remaining="Email address is alice@example.com, Password is hunter2, Remember this device is true" -> setState(n6)=applied
+[agent] tick 2 remaining="Set password to 'hunter2' and check 'Remember this device' checkbox" -> setState(n7)=applied setState(n8)=applied
 [agent] tick 3 remaining="" -> clickTrigger(n9)=applied
-[agent] tick 4 idle: nothing afforded
