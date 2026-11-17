@@ -12,13 +12,18 @@
 // `browser.storage.local`; this worker follows `storage.onChanged`. A panel
 // that inspects a tab also gets that tab's Scene stream, forwarded as it arrives.
 import { createOllama } from 'ollama-ai-provider-v2';
-import { AgentLoop } from '../utils/agent-loop';
-import { aiSdkBrain, createAiSdkValueFiller } from '../utils/brain';
-import { nothingAfforded, type Brain } from '../utils/decision';
-import { createGatedBrain } from '../utils/gated-brain';
-import { JEV_SYSTEM_ONE } from '../utils/openinference-decision/protocols';
-import { traceDecisions } from '../utils/openinference-decision/trace';
-import { createSystemOneBrain } from '../utils/system-one-brain';
+import {
+  AgentLoop,
+  createGatedBrain,
+  nothingAfforded,
+  type Brain,
+  type PendingDecision,
+  type ScenePatch,
+  type TurnRecord,
+} from '@gavmor/skene/core';
+import { aiSdkBrain, createAiSdkValueFiller } from '@gavmor/skene/brains/ai-sdk';
+import { createSystemOneBrain } from '@gavmor/skene/brains/system-one';
+import { JEV_SYSTEM_ONE, traceDecisions } from '@gavmor/skene/tracing';
 import { tracingFor } from '../utils/tracing';
 import {
   CONFIG_KEY,
@@ -32,9 +37,7 @@ import {
   type AgentConfig,
 } from '../utils/agent-config';
 import type { Browser } from 'wxt/browser';
-import type { ScenePatch } from '../utils/scene';
 import { AGENT_PORT, INSPECT_PORT, type InspectMessage, type InspectRequest } from '../utils/extension-protocol';
-import type { PendingDecision, TurnRecord } from '../utils/wire';
 
 const TURN_LOG_CAP = 200;
 

@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ContentPort, type PortLike } from '../utils/content-port';
-import type { Scene } from '../utils/scene';
-import type { DownMessage, UpMessage } from '../utils/wire';
+import type { DownMessage, Scene, UpMessage } from '@gavmor/skene/core';
 
 const scene: Scene = {
   documentId: 'd1',

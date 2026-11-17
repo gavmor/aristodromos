@@ -19,10 +19,8 @@ import {
   resolveConfig,
   type AgentConfig,
 } from '../../utils/agent-config';
-import type { PlanAction } from '../../utils/action-schema';
-import { TabScene } from '../../utils/tab-scene';
+import { TabScene, type PendingDecision, type PlanAction, type TurnRecord } from '@gavmor/skene/core';
 import { INSPECT_PORT, type InspectMessage, type InspectRequest } from '../../utils/extension-protocol';
-import type { PendingDecision, TurnRecord } from '../../utils/wire';
 
 function el<T extends HTMLElement>(id: string): T {
   const found = document.getElementById(id);

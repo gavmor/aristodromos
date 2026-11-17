@@ -212,6 +212,9 @@ importers:
       '@arizeai/openinference-vercel':
         specifier: ^3.3.0
         version: 3.3.0(@ai-sdk/otel@1.0.137(zod@4.6.5))(@opentelemetry/api@1.9.1)(@opentelemetry/semantic-conventions@1.43.0)(ai@7.0.137(zod@4.6.5))
+      '@gavmor/skene':
+        specifier: github:gavmor/skene#v0.1.0
+        version: https://codeload.github.com/gavmor/skene/tar.gz/6da2ee8d142ac4a62413ad5f6a16d6f6feaaf398(@arizeai/openinference-core@2.8.0)(@arizeai/openinference-semantic-conventions@2.14.0)(@opentelemetry/api@1.9.1)(@opentelemetry/semantic-conventions@1.43.0)(ai@7.0.137(zod@4.6.5))
       '@opentelemetry/api':
         specifier: ^1.9.1
         version: 1.9.1
@@ -230,21 +233,9 @@ importers:
       ai:
         specifier: ^7.0.137
         version: 7.0.137(zod@4.6.5)
-      aria-query:
-        specifier: ^5.3.2
-        version: 5.3.2
-      dom-accessibility-api:
-        specifier: ^0.7.1
-        version: 0.7.1
-      fast-json-patch:
-        specifier: ^3.1.1
-        version: 3.1.1
       ollama-ai-provider-v2:
         specifier: ^4.0.1
         version: 4.0.1(ai@7.0.137(zod@4.6.5))(zod@4.6.5)
-      zod:
-        specifier: ^4.6.5
-        version: 4.6.5
     devDependencies:
       '@webext-core/fake-browser':
         specifier: 1.3.4
@@ -599,6 +590,27 @@ packages:
       '@noble/hashes': ^1.8.0 || ^2.0.0
     peerDependenciesMeta:
       '@noble/hashes':
+        optional: true
+
+  '@gavmor/skene@https://codeload.github.com/gavmor/skene/tar.gz/6da2ee8d142ac4a62413ad5f6a16d6f6feaaf398':
+    resolution: {gitHosted: true, integrity: sha512-AghGp5GDFI/s5YquRY0kJX4EjXDexUFncKje+pTST91shfSxuoUWIBFzpSEPL/xBv8uXh5q3wefmerW363HGUw==, tarball: https://codeload.github.com/gavmor/skene/tar.gz/6da2ee8d142ac4a62413ad5f6a16d6f6feaaf398}
+    version: 0.1.0
+    peerDependencies:
+      '@arizeai/openinference-core': ^2.8.0
+      '@arizeai/openinference-semantic-conventions': ^2.14.0
+      '@opentelemetry/api': ^1.9.1
+      '@opentelemetry/semantic-conventions': ^1.43.0
+      ai: ^7.0.137
+    peerDependenciesMeta:
+      '@arizeai/openinference-core':
+        optional: true
+      '@arizeai/openinference-semantic-conventions':
+        optional: true
+      '@opentelemetry/api':
+        optional: true
+      '@opentelemetry/semantic-conventions':
+        optional: true
+      ai:
         optional: true
 
   '@jridgewell/gen-mapping@0.3.13':
@@ -3150,6 +3162,19 @@ snapshots:
     optional: true
 
   '@exodus/bytes@1.15.0': {}
+
+  '@gavmor/skene@https://codeload.github.com/gavmor/skene/tar.gz/6da2ee8d142ac4a62413ad5f6a16d6f6feaaf398(@arizeai/openinference-core@2.8.0)(@arizeai/openinference-semantic-conventions@2.14.0)(@opentelemetry/api@1.9.1)(@opentelemetry/semantic-conventions@1.43.0)(ai@7.0.137(zod@4.6.5))':
+    dependencies:
+      aria-query: 5.3.2
+      dom-accessibility-api: 0.7.1
+      fast-json-patch: 3.1.1
+      zod: 4.6.5
+    optionalDependencies:
+      '@arizeai/openinference-core': 2.8.0
+      '@arizeai/openinference-semantic-conventions': 2.14.0
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/semantic-conventions': 1.43.0
+      ai: 7.0.137(zod@4.6.5)
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:

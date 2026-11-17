@@ -2,7 +2,7 @@
 // One long-lived `browser.runtime.connect` Port per content-script lifetime
 // carries wire.ts's messages; its disconnect IS the lifecycle end — there is no
 // separate teardown message to lose.
-import type { ScenePatch } from './scene';
+import type { ScenePatch } from '@gavmor/skene/core';
 
 export const AGENT_PORT = 'aristodromos-agent';
 

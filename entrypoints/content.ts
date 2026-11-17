@@ -7,11 +7,10 @@
 //
 // The Port is reopened whenever the background drops it (service-worker
 // eviction, back/forward cache); see ContentPort.
-import { SceneProjector } from '../utils/scene-projector';
-import { handlePlan } from '../utils/plan-handler';
+import type { DownMessage } from '@gavmor/skene/core';
+import { handlePlan, SceneProjector } from '@gavmor/skene/dom';
 import { ContentPort } from '../utils/content-port';
 import { AGENT_PORT } from '../utils/extension-protocol';
-import type { DownMessage } from '../utils/wire';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
