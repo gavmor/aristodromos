@@ -13,10 +13,12 @@
 // that inspects a tab also gets that tab's Scene stream, forwarded as it arrives.
 import { createOllama } from 'ollama-ai-provider-v2';
 import { AgentLoop } from '../utils/agent-loop';
-import { aiSdkBrain, nothingAfforded, type Brain } from '../utils/brain';
+import { aiSdkBrain, createAiSdkValueFiller } from '../utils/brain';
+import { nothingAfforded, type Brain } from '../utils/decision';
+import { createGatedBrain } from '../utils/gated-brain';
 import { JEV_SYSTEM_ONE } from '../utils/openinference-decision/protocols';
 import { traceDecisions } from '../utils/openinference-decision/trace';
-import { createGatedBrain, createSystemOneBrain } from '../utils/system-one-brain';
+import { createSystemOneBrain } from '../utils/system-one-brain';
 import { tracingFor } from '../utils/tracing';
 import {
   CONFIG_KEY,
@@ -31,14 +33,8 @@ import {
 } from '../utils/agent-config';
 import type { Browser } from 'wxt/browser';
 import type { ScenePatch } from '../utils/scene';
-import {
-  AGENT_PORT,
-  INSPECT_PORT,
-  type InspectMessage,
-  type InspectRequest,
-  type PendingDecision,
-  type TurnRecord,
-} from '../utils/wire';
+import { AGENT_PORT, INSPECT_PORT, type InspectMessage, type InspectRequest } from '../utils/extension-protocol';
+import type { PendingDecision, TurnRecord } from '../utils/wire';
 
 const TURN_LOG_CAP = 200;
 
@@ -82,7 +78,8 @@ function setBadge(tabId: number, enabled: boolean, paused: boolean): void {
 function brainFor(config: AgentConfig): Brain {
   const tracing = tracingFor(config.tracing);
   const ollama = createOllama({ baseURL: config.baseURL });
-  const slow = aiSdkBrain(ollama.chat(config.model), tracing?.telemetry);
+  const model = ollama.chat(config.model);
+  const slow = aiSdkBrain(model, tracing?.telemetry);
   if (!config.systemOne) return slow;
 
   return createGatedBrain({
@@ -92,6 +89,7 @@ function brainFor(config: AgentConfig): Brain {
       fetchImpl: tracing && traceDecisions({ tracer: tracing.tracer, protocol: JEV_SYSTEM_ONE }),
     }),
     slow,
+    fillValue: createAiSdkValueFiller(model, tracing?.telemetry),
     threshold: config.systemOne.threshold,
   });
 }

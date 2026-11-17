@@ -1,17 +1,9 @@
-// The System-One brain, and the confidence gate that puts it in FRONT of the
-// AI SDK one.
-//
-// The shape of the idea: a small, cheap, off-schema-impossible decider answers
-// the question the loop actually asks — "which of these legal moves is next?" —
-// in one forward pass, and reports how sure it is. The big model is kept, but
-// it is now the exception path rather than the only path. Two things send a
-// decision to it:
-//
-//   1. low confidence — the classifier is spreading mass across options, which
-//      is exactly the situation a bigger model is worth paying for;
-//   2. a value it structurally cannot produce — System-One picks among labels,
-//      so it can choose a checkbox's true/false or a select's own option, but it
-//      cannot invent the text of an email address.
+// The System-One brain: a small, cheap, off-schema-impossible decider that
+// answers the question the loop actually asks — "which of these legal moves is
+// next?" — in one forward pass, and reports how sure it is. It is meant to sit
+// in front of a slower brain behind `createGatedBrain` (gated-brain.ts), which
+// hands a decision over on low confidence, or when the move is a free-text
+// value that System One, picking among labels, cannot write.
 //
 // One tick is normally one action. The exception is a playbook (see
 // system-one-questions.ts): when the chosen move lands in a scope whose every
@@ -23,16 +15,8 @@
 // is the commit, so it is never submitted bare), and the batch's confidence is the
 // minimum over the move and every member, so one unsure member sends the whole
 // Scene to the slow brain instead of committing a guess.
-//
-// Everything here is additive: with no System-One configured the loop runs the
-// AI SDK brain alone, exactly as before.
-import {
-  AI_SDK_BRAIN,
-  nothingAfforded,
-  type Brain,
-  type BrainInput,
-  type Decision,
-} from './brain';
+import { nothingAfforded, type BrainInput } from './decision';
+import type { ScoredDecision } from './gated-brain';
 import type { PlanAction } from './action-schema';
 import {
   ACTION_QUESTION,
@@ -53,24 +37,18 @@ import {
 export const SYSTEM_ONE_BRAIN = 'system-one';
 
 /**
- * A System-One decision also carries the two signals the gate reads.
- *
  * `confidence` is the SERVER's calibrated number, never recomputed here (see
  * system-one.ts). On a setState it is the minimum of the action question's
  * confidence and the value question's — a sure target with an unsure value is
  * not a sure decision. On a playbook batch it is the minimum over the action
  * question and every member's value question, for the same reason.
+ *
+ * `needsValue` is set when the chosen move is a setState on a free-text control:
+ * System One picks among labels and cannot write the string. Used alone this
+ * brain idles there; behind `createGatedBrain` (gated-brain.ts) a value filler
+ * or the slow brain supplies it.
  */
-export interface SystemOneDecision extends Decision {
-  confidence: number;
-  /**
-   * Set when the chosen move is a setState on a free-text control. The target is
-   * decided; only the string is missing. `actions` is empty in this case, so a
-   * System-One brain used ALONE would idle here — `createGatedBrain` is the
-   * supported wiring, and it is what turns this flag into a fallback call.
-   */
-  needsValue?: string;
-}
+export type SystemOneDecision = ScoredDecision;
 
 export type SystemOneBrain = (input: BrainInput) => Promise<SystemOneDecision>;
 
@@ -193,48 +171,6 @@ export function createSystemOneBrain(options: SystemOneBrainOptions): SystemOneB
       ...base,
       confidence: Math.min(chosen.confidence, picked.confidence),
       actions: [{ kind: 'setState', nodeId: target.nodeId, value }],
-    };
-  };
-}
-
-export interface GatedBrainOptions {
-  fast: SystemOneBrain;
-  slow: Brain;
-  /** confidence at or above which the fast decision is emitted unreviewed */
-  threshold: number;
-}
-
-/**
- * The gate. Note what it does NOT do: it never edits or second-guesses a
- * confident System-One decision, and it never asks the big model to ratify one.
- * It only routes.
- *
- * A System-One failure (server down, 400, bad shape) routes to the slow brain
- * too, with the reason carried in `via` so it lands in the turn log rather than
- * being swallowed — an optional accelerator must not be able to stop the agent.
- */
-export function createGatedBrain({ fast, slow, threshold }: GatedBrainOptions): Brain {
-  return async (input) => {
-    let decision: SystemOneDecision;
-    try {
-      decision = await fast(input);
-    } catch (err) {
-      const why = err instanceof Error ? err.message : String(err);
-      return { ...(await slow(input)), via: `${AI_SDK_BRAIN} (${SYSTEM_ONE_BRAIN} failed: ${why})` };
-    }
-
-    // Nothing afforded is a fact about the Scene, not a judgement call; the big
-    // model is handed the same empty option set and would reach the same place.
-    if (!decision.decided) return decision;
-    if (decision.needsValue === undefined && decision.confidence >= threshold) return decision;
-
-    const reason = decision.needsValue !== undefined ? `needs a value for ${decision.needsValue}` : 'low confidence';
-    return {
-      ...(await slow(input)),
-      // `confidence` is kept deliberately: it is the measurement that EXPLAINS
-      // the fallback, while `via` records who actually decided.
-      confidence: decision.confidence,
-      via: `${SYSTEM_ONE_BRAIN}->${AI_SDK_BRAIN} (${reason})`,
     };
   };
 }

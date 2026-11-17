@@ -36,7 +36,7 @@
 // does not carry; and since setState is convergent, members that already hold
 // their value are no-ops in the batch.
 import { isActionNode, isReachable, isStateNode } from './action-schema';
-import { describeScene } from './brain';
+import { describeScene } from './describe-scene';
 import type { ActionNode, NodeId, Scene, SceneNode, StateNode } from './scene';
 import { MAX_CHOICE_CRITERIA } from './system-one';
 import type { SystemOneQuestion } from './system-one';

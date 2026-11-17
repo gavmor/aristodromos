@@ -16,7 +16,7 @@
 // again. The tick budget exists only to bound a page that churns on its own.
 import { TabScene, splitNodeId, type ComposedScene } from './tab-scene';
 import { buildActionSchema, type PlanAction } from './action-schema';
-import type { Decision } from './brain';
+import type { Decision } from './decision';
 import type { NodeId, Scene, ScenePatch } from './scene';
 import type { DownMessage, PendingDecision, TurnRecord } from './wire';
 

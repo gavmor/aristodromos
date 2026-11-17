@@ -7,7 +7,7 @@
 import { AgentLoop, type AgentLoopDeps } from '../../utils/agent-loop';
 import { handlePlan } from '../../utils/plan-handler';
 import { SceneProjector } from '../../utils/scene-projector';
-import type { Decision } from '../../utils/brain';
+import type { Decision } from '../../utils/decision';
 import type { Scene, SceneNode } from '../../utils/scene';
 import type { TurnRecord } from '../../utils/wire';
 

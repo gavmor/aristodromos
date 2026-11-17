@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MockLanguageModelV4 } from 'ai/test';
-import { decide, describeScene } from '../utils/brain';
+import { decide } from '../utils/brain';
+import { describeScene } from '../utils/describe-scene';
 import { buildActionSchema } from '../utils/action-schema';
 import { SceneProjector } from '../utils/scene-projector';
 import { TabScene } from '../utils/tab-scene';

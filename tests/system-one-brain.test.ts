@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createGatedBrain, createSystemOneBrain } from '../utils/system-one-brain';
+import { createGatedBrain } from '../utils/gated-brain';
+import { createSystemOneBrain } from '../utils/system-one-brain';
 import { ACTION_QUESTION, DONE_QUESTION, valueQuestionKey } from '../utils/system-one-questions';
-import type { Brain, Decision } from '../utils/brain';
+import type { Brain, Decision } from '../utils/decision';
 import type { SystemOneAnswer } from '../utils/system-one';
 import { MAX_CHOICE_CRITERIA } from '../utils/system-one';
 import { actionNode, loginScene, perception, sceneOf, selectFormScene, selectNode, stateNode } from './fixtures/scene';
@@ -200,6 +201,42 @@ describe('createGatedBrain', () => {
     expect(decision.via).toBe('system-one->ai-sdk (needs a value for n1)');
   });
 
+  describe('with a value filler', () => {
+    const wants = (confidence: number) =>
+      brainWith({ [ACTION_QUESTION]: choice('fill_email_address', confidence), [DONE_QUESTION]: { type: 'noul', noul: 0.01 } })
+        .brain;
+    const gate = (confidence: number, filled: { value: string; via: string } | null) => {
+      const slow = slowBrain();
+      const fillValue = vi.fn(async () => filled);
+      const brain = createGatedBrain({ fast: wants(confidence), slow, threshold: 0.6, fillValue });
+      return { slow, fillValue, decide: () => brain({ scene: loginScene({ submitEnabled: true }), goal: 'sign in as alice@example.com' }) };
+    };
+
+    it('writes only the missing string for a target System-One is sure of', async () => {
+      const { slow, fillValue, decide } = gate(0.99, { value: 'alice@example.com', via: 'filler' });
+      const decision = await decide();
+      expect(fillValue).toHaveBeenCalledWith(expect.anything(), 'n1');
+      expect(slow).not.toHaveBeenCalled();
+      expect(decision.actions).toEqual([{ kind: 'setState', nodeId: 'n1', value: 'alice@example.com' }]);
+      expect(decision.via).toBe('system-one+filler (value for n1)');
+      expect(decision).not.toHaveProperty('needsValue');
+    });
+
+    it('never fills a target System-One was unsure of', async () => {
+      const { slow, fillValue, decide } = gate(0.3, { value: 'x', via: 'filler' });
+      const decision = await decide();
+      expect(fillValue).not.toHaveBeenCalled();
+      expect(slow).toHaveBeenCalledTimes(1);
+      expect(decision.via).toBe('system-one->ai-sdk (low confidence)');
+    });
+
+    it('hands over to the slow brain when the filler has no answer', async () => {
+      const { slow, decide } = gate(0.99, null);
+      expect((await decide()).via).toBe('system-one->ai-sdk (needs a value for n1)');
+      expect(slow).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('an unreachable System-One must not stop the agent — it falls through, reason recorded', async () => {
     const fetchImpl = vi.fn(async () => {
       throw new Error('ECONNREFUSED');
@@ -212,7 +249,7 @@ describe('createGatedBrain', () => {
     });
 
     expect(slow).toHaveBeenCalledTimes(1);
-    expect(decision.via).toContain('system-one failed: ECONNREFUSED');
+    expect(decision.via).toBe('ai-sdk (fast brain failed: ECONNREFUSED)');
   });
 
   it('does not ask the big model to re-litigate an empty option set', async () => {

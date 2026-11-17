@@ -1,9 +1,8 @@
-// The Port contract between the two halves.
-//
-// One long-lived `browser.runtime.connect` channel per content-script lifetime.
-// Up: a Scene snapshot on connect/navigation, then fast-json-patch deltas.
-// Down: a plan to actuate. Port disconnect IS the lifecycle end — there is no
-// separate teardown message to lose.
+// The messages between the perceiving half (a page's projector and
+// reconciler) and the deciding half (the loop). Up: a Scene snapshot on
+// connect/navigation, then fast-json-patch deltas. Down: a plan to actuate.
+// How they travel is the host's business (an extension Port, a test's function
+// call); see the extension's extension-protocol.ts.
 //
 // Deliberately absent: watermarks, acks, sequence numbers. The loop is
 // at-least-once and memoryless; it closes through the WORLD, not through the
@@ -12,8 +11,6 @@
 import type { ScenePatch } from './scene';
 import type { PlanAction } from './action-schema';
 
-export const AGENT_PORT = 'aristodromos-agent';
-
 /** content -> background */
 export type UpMessage = ScenePatch;
 
@@ -21,24 +18,6 @@ export type UpMessage = ScenePatch;
 export type DownMessage =
   | { kind: 'plan'; documentId: string; tick: number; satisfied: string; remaining: string; actions: PlanAction[] }
   | { kind: 'idle'; documentId: string; tick: number; reason: string };
-
-/**
- * The DevTools panel's read-only view of one tab's Scene. The panel connects,
- * names its tab, and from then on receives exactly what that tab's frames send
- * up, each tagged with its frame: every frame's current Scene first, then every
- * snapshot and patch, and word when a frame goes away. The panel composes them
- * the same way the background does (TabScene).
- */
-export const INSPECT_PORT = 'aristodromos-inspect';
-
-/** panel -> background, once per connection */
-export interface InspectRequest {
-  kind: 'inspect';
-  tabId: number;
-}
-
-/** background -> panel */
-export type InspectMessage = { frameId: number; message: ScenePatch } | { frameId: number; gone: true };
 
 /** A decision awaiting the brain; published so a UI can show the wait. */
 export interface PendingDecision {

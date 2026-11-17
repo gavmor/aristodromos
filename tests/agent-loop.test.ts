@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AgentLoop } from '../utils/agent-loop';
 import { SceneStore } from '../utils/scene-store';
-import type { Decision } from '../utils/brain';
+import type { Decision } from '../utils/decision';
 import type { Perception, Scene, SceneNode, StateNode } from '../utils/scene';
 import type { DownMessage, PendingDecision, TurnRecord } from '../utils/wire';
 

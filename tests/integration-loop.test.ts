@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createGatedBrain, createSystemOneBrain } from '../utils/system-one-brain';
+import { createGatedBrain } from '../utils/gated-brain';
+import { createSystemOneBrain } from '../utils/system-one-brain';
 import { ACTION_QUESTION, DONE_QUESTION } from '../utils/system-one-questions';
-import type { Brain, Decision } from '../utils/brain';
+import type { Brain, Decision } from '../utils/decision';
 import type { StateNode } from '../utils/scene';
 import { click, finished, mount, named, pageSays, set, type Rig } from './fixtures/rig';
 

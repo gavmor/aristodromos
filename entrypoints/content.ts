@@ -10,7 +10,8 @@
 import { SceneProjector } from '../utils/scene-projector';
 import { handlePlan } from '../utils/plan-handler';
 import { ContentPort } from '../utils/content-port';
-import { AGENT_PORT, type DownMessage } from '../utils/wire';
+import { AGENT_PORT } from '../utils/extension-protocol';
+import type { DownMessage } from '../utils/wire';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -22,7 +23,7 @@ export default defineContentScript({
     let projector: SceneProjector | undefined;
 
     const onPlan = (message: DownMessage): void => {
-      if (projector) handlePlan(projector, message, (patch) => channel.send(patch));
+      if (projector) handlePlan(projector, message, (patch) => channel.send(patch), (line) => console.log(line));
     };
 
     const channel = new ContentPort({

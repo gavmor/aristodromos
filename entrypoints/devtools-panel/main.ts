@@ -21,13 +21,8 @@ import {
 } from '../../utils/agent-config';
 import type { PlanAction } from '../../utils/action-schema';
 import { TabScene } from '../../utils/tab-scene';
-import {
-  INSPECT_PORT,
-  type InspectMessage,
-  type InspectRequest,
-  type PendingDecision,
-  type TurnRecord,
-} from '../../utils/wire';
+import { INSPECT_PORT, type InspectMessage, type InspectRequest } from '../../utils/extension-protocol';
+import type { PendingDecision, TurnRecord } from '../../utils/wire';
 
 function el<T extends HTMLElement>(id: string): T {
   const found = document.getElementById(id);
