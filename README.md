@@ -246,6 +246,7 @@ e2e/
 | `pnpm build` | Production MV3 build |
 | `pnpm test` | Vitest unit tests |
 | `pnpm typecheck` | `tsc --noEmit` |
+| `pnpm lint` | Biome lint + format check (`pnpm lint:fix` applies) |
 | `pnpm cpd` | Copy-paste detection |
 | `pnpm e2e` | Build, then drive a real page headlessly end to end |
 

@@ -14,9 +14,10 @@
 | `pnpm build` | Production build via WXT |
 | `pnpm test` | Run Vitest unit tests |
 | `pnpm typecheck` | Run tsc --noEmit |
+| `pnpm lint` | Biome lint + format check (`pnpm lint:fix` applies) |
 | `pnpm cpd` | Run jscpd copy-paste detection |
 | `pnpm test:watch` | Vitest watch mode |
 
 ## Commits
-- Lefthook enforces pre-commit hooks: `tsc`, `vitest run`, `jscpd`.
-- All three must pass before a commit is allowed.
+- Lefthook enforces pre-commit hooks: `tsc`, `biome check`, `vitest run`, `jscpd`.
+- All four must pass before a commit is allowed.
