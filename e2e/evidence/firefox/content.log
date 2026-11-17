@@ -1,0 +1,5 @@
+[JavaScript Error: "Content-Security-Policy: The page’s settings blocked a JavaScript eval (script-src) from being executed because it violates the following directive: “script-src 'self' 'wasm-unsafe-eval' http://localhost:* http://127.0.0.1:*” (Missing 'unsafe-eval')" {file: "moz-extension://7d2c1f0e-6a39-4f7e-9d3b-2a1e0c5b8f41/background.js" line: 1}]
+[JavaScript Error: "Content-Security-Policy: The page’s settings blocked a JavaScript eval (script-src) from being executed because it violates the following directive: “script-src 'self'” (Missing 'unsafe-eval')" {file: "moz-extension://7d2c1f0e-6a39-4f7e-9d3b-2a1e0c5b8f41/background.js" line: 1}]
+[JavaScript Error: "TypeError: can't access property "inspectedWindow", (intermediate value).devtools is undefined" {file: "moz-extension://7d2c1f0e-6a39-4f7e-9d3b-2a1e0c5b8f41/chunks/devtools-panel-yDaM1Jzh.js" line: 3}]
+@moz-extension://7d2c1f0e-6a39-4f7e-9d3b-2a1e0c5b8f41/chunks/devtools-panel-yDaM1Jzh.js:3:14262
+

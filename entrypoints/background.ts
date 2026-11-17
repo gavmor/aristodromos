@@ -126,8 +126,20 @@ export default defineBackground(() => {
     }
   };
 
+  // An idle background is shut down after ~30 s: Chrome's service worker and
+  // Firefox's event page alike, and Firefox does not count an open Port or a
+  // fetch in flight as activity. A local model can take longer than that to
+  // decide, and the decision dies with the worker. While any decision is
+  // pending, a cheap extension API call every 20 s keeps it alive.
+  let keepAlive: ReturnType<typeof setInterval> | undefined;
   const publishPending = (): void => {
     void browser.storage.session.set({ [PENDING_KEY]: [...pending.values()] });
+    if (pending.size > 0 && keepAlive === undefined) {
+      keepAlive = setInterval(() => void browser.runtime.getPlatformInfo(), 20_000);
+    } else if (pending.size === 0 && keepAlive !== undefined) {
+      clearInterval(keepAlive);
+      keepAlive = undefined;
+    }
   };
   // A fresh worker has no loops, so nothing it inherited can still be in flight.
   publishPending();

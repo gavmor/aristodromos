@@ -242,28 +242,45 @@ e2e/
 
 | Command | Action |
 |---|---|
-| `pnpm dev` | WXT dev server (HMR) |
-| `pnpm build` | Production MV3 build |
-| `pnpm zip` | Production build, zipped under `.output/` |
+| `pnpm dev` / `pnpm dev:firefox` | WXT dev server (HMR) |
+| `pnpm build` / `pnpm build:firefox` | Production MV3 build |
+| `pnpm zip` / `pnpm zip:firefox` | Production build, zipped under `.output/` (Firefox also gets the sources zip AMO review asks for) |
+| `pnpm lint:firefox` | Mozilla's `web-ext lint` over the Firefox build |
 | `pnpm test` | Vitest unit tests |
 | `pnpm typecheck` | `tsc --noEmit` |
 | `pnpm lint` | Biome lint + format check (`pnpm lint:fix` applies) |
 | `pnpm cpd` | Copy-paste detection |
-| `pnpm e2e` | Build, then drive a real page headlessly end to end |
+| `pnpm e2e` / `pnpm e2e:firefox` | Build, then drive a real page headlessly end to end (Firefox installs the release zip as a temporary add-on via geckodriver) |
 
 ## CI and releases
 
 `.github/workflows/ci.yml` runs on every pull request and every push to `main`:
 a frozen-lockfile install, then `pnpm typecheck`, `pnpm lint`, `pnpm test`,
-`pnpm cpd`, `pnpm build` and `pnpm zip`. `pnpm e2e` is not run in CI; it needs a
-local Ollama and Chromium (skene's `pnpm probe` also needs a Jev server).
+`pnpm cpd`, `pnpm build`, `pnpm zip`, `pnpm zip:firefox` and `pnpm lint:firefox`.
+`pnpm e2e` is not run in CI; it needs a local Ollama and a browser (skene's
+`pnpm probe` also needs a Jev server).
 
-Each green push to `main` publishes a GitHub Release with the extension zip
-attached. Tags are `build-<N>`, where `N` is the number of commits reachable
+Each green push to `main` publishes a GitHub Release with three zips attached:
+the Chrome package, the Firefox package, and the sources archive AMO review asks
+for. Tags are `build-<N>`, where `N` is the number of commits reachable
 from the built commit (`git rev-list --count <sha>`), so they grow with `main`
 and nobody bumps a version by hand. A failing build never releases. Pull
-requests run the release step as a dry run, which validates the zip and prints
+requests run the release step as a dry run, which validates the zips and prints
 the tag it would publish.
+
+## Install
+
+From the [latest release](https://github.com/gavmor/aristodromos/releases/latest):
+
+- **Chrome / Chromium**: unzip `aristodromos-build-<N>-chrome.zip`, open
+  `chrome://extensions`, switch on Developer mode, and *Load unpacked* the folder.
+- **Firefox 140+**: open `about:debugging#/runtime/this-firefox` and *Load
+  Temporary Add-on…* with `aristodromos-build-<N>-firefox.zip`. A temporary
+  add-on lasts until Firefox restarts. The package is not signed by Mozilla yet,
+  so a permanent install needs Developer Edition or Nightly with
+  `xpinstall.signatures.required` set to `false` (`about:config`), or an AMO
+  signature. On install Firefox asks for access to all sites and declares that
+  page content is sent on: to the model server you configure.
 
 ## Prerequisites
 
@@ -272,7 +289,9 @@ the tag it would publish.
   `http://192.168.0.20:11434/api`) with `qwen3-coder-ud-q4kxl:latest`
   (Qwen3-Coder-30B-A3B, ~17 GB — MoE, 3B active, fast enough to sit in a
   per-observation loop)
-- Chromium at `/usr/bin/chromium` for `pnpm e2e` (override with `CHROMIUM_PATH`)
+- Chromium at `/usr/bin/chromium` for `pnpm e2e` (override with `CHROMIUM_PATH`);
+  Firefox at `/usr/bin/firefox` for `pnpm e2e:firefox` (override with `FIREFOX_PATH`;
+  geckodriver is fetched by Selenium Manager)
 - *Optional*, for the System One path: any server speaking `POST /v1/systemone`.
   skene's `pnpm probe` checks one against a real page.
 - *Optional*, for tracing: any OTLP/HTTP (protobuf) collector; Arize Phoenix is

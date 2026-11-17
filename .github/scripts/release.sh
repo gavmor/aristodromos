@@ -5,7 +5,7 @@
 # forward, so every new commit has a strictly larger N than its ancestors, and
 # the same commit always maps to the same tag (a re-run publishes nothing new).
 #
-# Env: SHA (commit built), ZIP_DIR (holds the `wxt zip` output), GH_TOKEN,
+# Env: SHA (commit built), ZIP_DIR (holds the chrome, firefox and sources zips), GH_TOKEN,
 #      DRY_RUN=1 to plan and validate without publishing.
 set -euo pipefail
 
@@ -40,33 +40,42 @@ if [[ -n "$highest" && "$n" -lt "$highest" ]]; then
 fi
 
 shopt -s nullglob
-zips=("$ZIP_DIR"/*-chrome.zip)
-if [[ ${#zips[@]} -ne 1 ]]; then
-  echo "::error::expected exactly one *-chrome.zip in $ZIP_DIR, found ${#zips[@]}"
-  exit 1
-fi
-if ! unzip -Z1 "${zips[0]}" | grep -qx manifest.json; then
-  echo "::error::${zips[0]} has no manifest.json at its root"
-  exit 1
-fi
-# wxt names the zip after package.json's static version; name it after the tag.
-asset="$RUNNER_TEMP/aristodromos-$tag-chrome.zip"
-cp "${zips[0]}" "$asset"
+# One zip per wxt target: chrome and firefox are installable packages (each
+# with manifest.json at its root); sources is the source archive AMO review asks
+# for alongside the Firefox package. wxt names them after package.json's static
+# version; the assets are named after the tag.
+assets=()
+for kind in chrome firefox sources; do
+  zips=("$ZIP_DIR"/*-"$kind".zip)
+  if [[ ${#zips[@]} -ne 1 ]]; then
+    echo "::error::expected exactly one *-$kind.zip in $ZIP_DIR, found ${#zips[@]}"
+    exit 1
+  fi
+  if [[ "$kind" != sources ]] && ! unzip -Z1 "${zips[0]}" | grep -qx manifest.json; then
+    echo "::error::${zips[0]} has no manifest.json at its root"
+    exit 1
+  fi
+  asset="$RUNNER_TEMP/aristodromos-$tag-$kind.zip"
+  cp "${zips[0]}" "$asset"
+  assets+=("$asset")
+done
 
 notes="Built from $SHA by $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 
 echo "tag:    $tag"
 echo "target: $SHA"
 echo "latest: $latest (highest existing: ${highest:-none})"
-echo "asset:  $(basename "$asset") ($(stat -c %s "$asset") bytes)"
-unzip -l "$asset"
+for asset in "${assets[@]}"; do
+  echo "asset:  $(basename "$asset") ($(stat -c %s "$asset") bytes)"
+done
+unzip -l "${assets[0]}"
 
 if [[ "$dry_run" == 1 ]]; then
   echo "DRY_RUN: not publishing."
   exit 0
 fi
 
-gh release create "$tag" "$asset" \
+gh release create "$tag" "${assets[@]}" \
   --repo "$GITHUB_REPOSITORY" \
   --target "$SHA" \
   --title "$tag" \
