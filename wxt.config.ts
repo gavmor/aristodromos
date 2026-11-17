@@ -5,6 +5,8 @@ export default defineConfig({
   manifestVersion: 3,
   srcDir: '.',
   manifest: {
+    // The display name; WXT would otherwise take package.json's lowercase name.
+    name: 'Aristodromos',
     // `storage` holds the goal and the turn log across service-worker eviction;
     // `<all_urls>` covers both the pages we drive and the local Ollama the
     // background worker fetches from.
