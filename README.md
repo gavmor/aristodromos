@@ -214,7 +214,7 @@ AI SDK brain alone, exactly as before.
 
 ## Project structure
 
-Everything is not about being a browser extension (the Scene, projection,
+Everything that is not about being a browser extension (the Scene, projection,
 actuation, the loop, the brains, decision tracing) lives in
 [skene](https://github.com/gavmor/skene), a dependency pinned to a tag
 (`@gavmor/skene`, imported by subpath: `/core`, `/dom`, `/brains/ai-sdk`,
