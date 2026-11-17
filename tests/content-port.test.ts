@@ -1,7 +1,6 @@
+import type { DownMessage, Scene, UpMessage } from '@gavmor/skene/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ContentPort, type PortLike } from '../utils/content-port';
-import type { Scene } from '../utils/scene';
-import type { DownMessage, UpMessage } from '../utils/wire';
 
 const scene: Scene = {
   documentId: 'd1',
@@ -178,7 +177,14 @@ describe('ContentPort', () => {
     await vi.advanceTimersByTimeAsync(100);
     expect(ports[1].posted).toEqual([snapshot]);
 
-    ports[1].deliver({ kind: 'plan', documentId: 'd1', tick: 1, satisfied: '', remaining: 'x', actions: [{ kind: 'clickTrigger', nodeId: 'n1' }] });
+    ports[1].deliver({
+      kind: 'plan',
+      documentId: 'd1',
+      tick: 1,
+      satisfied: '',
+      remaining: 'x',
+      actions: [{ kind: 'clickTrigger', nodeId: 'n1' }],
+    });
     ports[1].drop();
     await vi.advanceTimersByTimeAsync(100);
     expect(ports[2].posted).toEqual([snapshot]);

@@ -11,7 +11,7 @@
   color-scheme: light;
 }
 
-:root[data-theme='dark'] {
+:root[data-theme="dark"] {
   --bg: #202124;
   --fg: #e3e3e3;
   --muted: #9aa0a6;
@@ -33,7 +33,9 @@ body {
   padding: 8px 12px 16px;
   background: var(--bg);
   color: var(--fg);
-  font: 12px/1.4 system-ui, sans-serif;
+  font:
+    12px / 1.4 system-ui,
+    sans-serif;
 }
 
 header {
@@ -70,15 +72,15 @@ form {
   font-weight: 600;
 }
 
-.pill[data-state='running'] {
+.pill[data-state="running"] {
   background: var(--running);
 }
 
-.pill[data-state='paused'] {
+.pill[data-state="paused"] {
   background: var(--paused);
 }
 
-.pill[data-state='off'] {
+.pill[data-state="off"] {
   background: transparent;
   color: var(--muted);
   border: 1px solid var(--border);
@@ -94,7 +96,7 @@ button {
   cursor: pointer;
 }
 
-button[type='submit'] {
+button[type="submit"] {
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -157,13 +159,13 @@ fieldset {
   border-radius: 4px;
 }
 
-fieldset:disabled .row {
-  opacity: 0.5;
-}
-
 .row {
   display: flex;
   gap: 8px;
+}
+
+fieldset:disabled .row {
+  opacity: 0.5;
 }
 
 .actions {
@@ -291,5 +293,6 @@ details#scene > summary {
 }
 
 [hidden] {
+  /* biome-ignore lint/complexity/noImportantStyles: an element's own display rule must not un-hide it */
   display: none !important;
 }

@@ -214,6 +214,13 @@ AI SDK brain alone, exactly as before.
 
 ## Project structure
 
+Everything that is not about being a browser extension (the Scene, projection,
+actuation, the loop, the brains, decision tracing) lives in
+[skene](https://github.com/gavmor/skene), a dependency on a GitHub Release's
+built tarball (`@gavmor/skene`, imported by subpath: `/core`, `/dom`,
+`/brains/ai-sdk`, `/brains/system-one`, `/tracing`). Bumping it means changing
+the release URL in `package.json`. To develop both at once: `pnpm link ../skene`.
+
 ```
 entrypoints/
 ├── background.ts       # one AgentLoop per tab, over all its frames; follows goal + pause in storage
@@ -221,29 +228,13 @@ entrypoints/
 ├── devtools/           # registers the DevTools panel
 └── devtools-panel/     # control + status: pause, goal/brain config, turn log, live Scene
 utils/
-├── scene.ts            # the Scene contract (faithful page simulacrum)
-├── scene-projector.ts  # DOM → Scene, dirty-set → targeted JSON-Patch ops
-├── semantic-parser.ts  # roles, accessible names, categories, perception
-├── node-identity.ts    # stable NodeIds (mirror + semantic re-key), reverse lookup
-├── actuation.ts        # per-node actuation recipes (react-setter, pointer sequence)
-├── action-schema.ts    # Scene → discriminated-union zod schema
-├── brain.ts            # Scene + goal → Plan via AI SDK generateObject; describeScene's outline
-├── system-one.ts       # typed POST /v1/systemone client (provider-agnostic)
-├── system-one-questions.ts # Scene → choice questions; slug ↔ (verb, nodeId)
-├── system-one-brain.ts # the System One brain + the confidence gate
-├── tracing.ts          # one OTLP provider per endpoint+project: AI SDK telemetry + a tracer
-├── openinference-decision/ # DECISION spans over a fetch seam (Apache-2.0 fork; LICENSE, NOTICE)
-├── agent-loop.ts       # settle debounce, tick budget, decide/emit (no browser API)
-├── scene-store.ts      # one frame's replica, folded from its patch stream
-├── tab-scene.ts        # a tab's frames composed into one Scene; frame-namespaced node ids
-├── reconciler.ts       # Plan → page effects, with noop/stale/rejected honesty
-├── wire.ts             # the Port contract
+├── extension-protocol.ts # Port names + the DevTools panel's inspect protocol
 ├── content-port.ts     # content end of the Port: reconnects after eviction/bfcache, re-announces the Scene
+├── tracing.ts          # one OTLP provider per endpoint+project: AI SDK telemetry + a tracer
 └── agent-config.ts     # goal + model (+ optional System One), in browser.storage.local
 e2e/
 ├── fixtures/login.html # a form whose submit is disabled until the fields are valid
 ├── run.ts              # headless Chromium, real extension, real Ollama
-├── systemone-probe.test.ts # real projector + real Jev server, one decision per page state
 └── repeat.sh           # run it N times and tally convergence
 ```
 
@@ -253,11 +244,26 @@ e2e/
 |---|---|
 | `pnpm dev` | WXT dev server (HMR) |
 | `pnpm build` | Production MV3 build |
+| `pnpm zip` | Production build, zipped under `.output/` |
 | `pnpm test` | Vitest unit tests |
 | `pnpm typecheck` | `tsc --noEmit` |
+| `pnpm lint` | Biome lint + format check (`pnpm lint:fix` applies) |
 | `pnpm cpd` | Copy-paste detection |
 | `pnpm e2e` | Build, then drive a real page headlessly end to end |
-| `pnpm probe` | One System One decision per page state, against a real Jev server |
+
+## CI and releases
+
+`.github/workflows/ci.yml` runs on every pull request and every push to `main`:
+a frozen-lockfile install, then `pnpm typecheck`, `pnpm lint`, `pnpm test`,
+`pnpm cpd`, `pnpm build` and `pnpm zip`. `pnpm e2e` is not run in CI; it needs a
+local Ollama and Chromium (skene's `pnpm probe` also needs a Jev server).
+
+Each green push to `main` publishes a GitHub Release with the extension zip
+attached. Tags are `build-<N>`, where `N` is the number of commits reachable
+from the built commit (`git rev-list --count <sha>`), so they grow with `main`
+and nobody bumps a version by hand. A failing build never releases. Pull
+requests run the release step as a dry run, which validates the zip and prints
+the tag it would publish.
 
 ## Prerequisites
 
@@ -268,7 +274,7 @@ e2e/
   per-observation loop)
 - Chromium at `/usr/bin/chromium` for `pnpm e2e` (override with `CHROMIUM_PATH`)
 - *Optional*, for the System One path: any server speaking `POST /v1/systemone`.
-  Point `pnpm probe` at it with `JEV_BASE_URL` / `JEV_MODEL`.
+  skene's `pnpm probe` checks one against a real page.
 - *Optional*, for tracing: any OTLP/HTTP (protobuf) collector; Arize Phoenix is
   the intended one (`docker run -p 6006:6006 arizephoenix/phoenix`, or
   `pip install arize-phoenix && phoenix serve`). Set
@@ -380,7 +386,7 @@ When the gate falls back, the System One call and the Ollama call are two traces
 not one. The AI SDK roots its spans in the active context, and a worker has no
 context manager to make the gate that context; adjacent start times are the link.
 
-`utils/openinference-decision/` does the DECISION spans. It is a fork of
+skene's `/tracing` (`openinference-decision/`) does the DECISION spans. It is a fork of
 OpenInference's TypeSafe instrumentation, Apache-2.0, with its own `LICENSE` and
 `NOTICE`. Upstream patches `@typesafe-ai/sdk` through a require hook, which a
 bundled worker cannot do; here a decision client's `fetch` is wrapped instead

@@ -11,7 +11,7 @@
 //
 // No browser API in here, so it can be driven by tests; the content script
 // supplies `connect`.
-import type { DownMessage, UpMessage } from './wire';
+import type { DownMessage, UpMessage } from '@gavmor/skene/core';
 
 /** The slice of `browser.runtime.Port` this module uses. */
 export interface PortLike {

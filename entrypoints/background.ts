@@ -11,34 +11,34 @@
 // show the Scene, but never acts. Goal, brain and pause live in
 // `browser.storage.local`; this worker follows `storage.onChanged`. A panel
 // that inspects a tab also gets that tab's Scene stream, forwarded as it arrives.
-import { createOllama } from 'ollama-ai-provider-v2';
-import { AgentLoop } from '../utils/agent-loop';
-import { aiSdkBrain, nothingAfforded, type Brain } from '../utils/brain';
-import { JEV_SYSTEM_ONE } from '../utils/openinference-decision/protocols';
-import { traceDecisions } from '../utils/openinference-decision/trace';
-import { createGatedBrain, createSystemOneBrain } from '../utils/system-one-brain';
-import { tracingFor } from '../utils/tracing';
+
+import { aiSdkBrain, createAiSdkValueFiller } from '@gavmor/skene/brains/ai-sdk';
+import { createSystemOneBrain } from '@gavmor/skene/brains/system-one';
 import {
+  AgentLoop,
+  type Brain,
+  createGatedBrain,
+  nothingAfforded,
+  type PendingDecision,
+  type ScenePatch,
+} from '@gavmor/skene/core';
+import { JEV_SYSTEM_ONE, traceDecisions } from '@gavmor/skene/tracing';
+import { createOllama } from 'ollama-ai-provider-v2';
+import type { Browser } from 'wxt/browser';
+import {
+  type AgentConfig,
   CONFIG_KEY,
   DECIDE_NOW_KEY,
   ENABLED_TABS_KEY,
+  enabledTabsOf,
   PAUSED_KEY,
   PENDING_KEY,
-  TURN_LOG_KEY,
-  enabledTabsOf,
   resolveConfig,
-  type AgentConfig,
+  TURN_LOG_KEY,
 } from '../utils/agent-config';
-import type { Browser } from 'wxt/browser';
-import type { ScenePatch } from '../utils/scene';
-import {
-  AGENT_PORT,
-  INSPECT_PORT,
-  type InspectMessage,
-  type InspectRequest,
-  type PendingDecision,
-  type TurnRecord,
-} from '../utils/wire';
+import { AGENT_PORT, INSPECT_PORT, type InspectMessage, type InspectRequest } from '../utils/extension-protocol';
+import { tracingFor } from '../utils/tracing';
+import { type LoggedTurn, turnsOf, withOutcome } from '../utils/turn-log';
 
 const TURN_LOG_CAP = 200;
 
@@ -50,12 +50,11 @@ async function readConfig(): Promise<AgentConfig> {
   return resolveConfig(stored[CONFIG_KEY]);
 }
 
-function appendTurn(turn: TurnRecord): void {
+/** One read-modify-write of the turn log, queued behind the others. */
+function updateLog(change: (log: LoggedTurn[]) => LoggedTurn[]): void {
   logWrites = logWrites.then(async () => {
     const stored = await browser.storage.local.get(TURN_LOG_KEY);
-    const log = (Array.isArray(stored[TURN_LOG_KEY]) ? stored[TURN_LOG_KEY] : []) as TurnRecord[];
-    log.push(turn);
-    await browser.storage.local.set({ [TURN_LOG_KEY]: log.slice(-TURN_LOG_CAP) });
+    await browser.storage.local.set({ [TURN_LOG_KEY]: change(turnsOf(stored[TURN_LOG_KEY])).slice(-TURN_LOG_CAP) });
   });
 }
 
@@ -63,7 +62,8 @@ function appendTurn(turn: TurnRecord): void {
 function setBadge(tabId: number, enabled: boolean, paused: boolean): void {
   // A tab can close between the decision and the call; its badge went with it.
   void browser.action.setBadgeText({ tabId, text: enabled ? (paused ? '⏸' : '▶') : '' }).catch(() => {});
-  if (enabled) void browser.action.setBadgeBackgroundColor({ tabId, color: paused ? '#666666' : '#2e7d32' }).catch(() => {});
+  if (enabled)
+    void browser.action.setBadgeBackgroundColor({ tabId, color: paused ? '#666666' : '#2e7d32' }).catch(() => {});
 }
 
 /**
@@ -82,7 +82,8 @@ function setBadge(tabId: number, enabled: boolean, paused: boolean): void {
 function brainFor(config: AgentConfig): Brain {
   const tracing = tracingFor(config.tracing);
   const ollama = createOllama({ baseURL: config.baseURL });
-  const slow = aiSdkBrain(ollama.chat(config.model), tracing?.telemetry);
+  const model = ollama.chat(config.model);
+  const slow = aiSdkBrain(model, tracing?.telemetry);
   if (!config.systemOne) return slow;
 
   return createGatedBrain({
@@ -92,6 +93,7 @@ function brainFor(config: AgentConfig): Brain {
       fetchImpl: tracing && traceDecisions({ tracer: tracing.tracer, protocol: JEV_SYSTEM_ONE }),
     }),
     slow,
+    fillValue: createAiSdkValueFiller(model, tracing?.telemetry),
     threshold: config.systemOne.threshold,
   });
 }
@@ -150,8 +152,9 @@ export default defineBackground(() => {
       record: (turn) => {
         const stamped = { ...turn, tabId };
         console.log(`[agent] turn ${turn.tick}: ${JSON.stringify(stamped)}`);
-        appendTurn(stamped);
+        updateLog((log) => [...log, stamped]);
       },
+      outcome: (outcome) => updateLog((log) => withOutcome(log, tabId, outcome)),
       pending: (decision) => {
         if (decision) pending.set(tabId, { ...decision, tabId });
         else pending.delete(tabId);

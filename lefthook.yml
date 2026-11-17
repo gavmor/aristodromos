@@ -3,6 +3,8 @@ pre-commit:
   commands:
     typecheck:
       run: pnpm typecheck
+    lint:
+      run: pnpm lint
     tests:
       run: pnpm test
     cpd:
