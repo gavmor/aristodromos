@@ -13,6 +13,17 @@
 //      so it can choose a checkbox's true/false or a select's own option, but it
 //      cannot invent the text of an email address.
 //
+// One tick is normally one action. The exception is a playbook (see
+// system-one-questions.ts): when the chosen move lands in a scope whose every
+// writable control is enumerable and which has one commit trigger, the brain
+// emits all of its setStates then the commit, decoded from value questions
+// that were already in the same request — no extra round trip, applied in order
+// by the reconciler. The batch is all or nothing: a missing or invalid member
+// answer drops back to the single action (at zero confidence when that action
+// is the commit, so it is never submitted bare), and the batch's confidence is the
+// minimum over the move and every member, so one unsure member sends the whole
+// Scene to the slow brain instead of committing a guess.
+//
 // Everything here is additive: with no System-One configured the loop runs the
 // AI SDK brain alone, exactly as before.
 import {
@@ -22,13 +33,22 @@ import {
   type BrainInput,
   type Decision,
 } from './brain';
+import type { PlanAction } from './action-schema';
 import {
   ACTION_QUESTION,
   DONE_QUESTION,
   buildActionQuestions,
   describeState,
+  type Playbook,
 } from './system-one-questions';
-import { askSystemOne, isChoiceAnswer, isNoulAnswer, MAX_CHOICE_CRITERIA, type FetchLike } from './system-one';
+import {
+  askSystemOne,
+  isChoiceAnswer,
+  isNoulAnswer,
+  MAX_CHOICE_CRITERIA,
+  type FetchLike,
+  type SystemOneResponse,
+} from './system-one';
 
 export const SYSTEM_ONE_BRAIN = 'system-one';
 
@@ -38,7 +58,8 @@ export const SYSTEM_ONE_BRAIN = 'system-one';
  * `confidence` is the SERVER's calibrated number, never recomputed here (see
  * system-one.ts). On a setState it is the minimum of the action question's
  * confidence and the value question's — a sure target with an unsure value is
- * not a sure decision.
+ * not a sure decision. On a playbook batch it is the minimum over the action
+ * question and every member's value question, for the same reason.
  */
 export interface SystemOneDecision extends Decision {
   confidence: number;
@@ -67,6 +88,30 @@ export interface SystemOneBrainOptions {
 }
 
 const DEFAULT_DONE_THRESHOLD = 0.75;
+
+/**
+ * Every member's setState, then the commit — or undefined if any member's
+ * answer is missing or names a label that was not offered. Half a playbook is
+ * never returned: committing a scope with one control unset is worse than the
+ * single action it would replace.
+ */
+function expandPlaybook(
+  playbook: Playbook,
+  answers: SystemOneResponse['answers'],
+): { actions: PlanAction[]; confidence: number } | undefined {
+  const actions: PlanAction[] = [];
+  let confidence = 1;
+  for (const { nodeId, decoder } of playbook.members) {
+    const picked = answers[decoder.key];
+    if (!isChoiceAnswer(picked)) return undefined;
+    const value = decoder.labels[picked.choice];
+    if (value === undefined) return undefined;
+    actions.push({ kind: 'setState', nodeId, value });
+    confidence = Math.min(confidence, picked.confidence);
+  }
+  actions.push({ kind: 'clickTrigger', nodeId: playbook.commit });
+  return { actions, confidence };
+}
 
 /**
  * One classification over one Scene.
@@ -118,6 +163,19 @@ export function createSystemOneBrain(options: SystemOneBrainOptions): SystemOneB
     if (!target) throw new Error(`system-one chose ${JSON.stringify(chosen.choice)}, which was not offered`);
 
     const base = { decided: true as const, via: SYSTEM_ONE_BRAIN, satisfied: '', remaining: '' };
+
+    const playbook = built.playbooks.find(
+      (p) => p.commit === target.nodeId || p.members.some((m) => m.nodeId === target.nodeId),
+    );
+    const batch = playbook && expandPlaybook(playbook, response.answers);
+    if (batch) return { ...base, confidence: Math.min(chosen.confidence, batch.confidence), actions: batch.actions };
+    // The commit was picked but its members could not all be decoded: a bare
+    // click would submit the scope unset. Zero confidence hands it to the slow
+    // brain. A picked member falls through to its own single setState instead,
+    // which is safe: it is just one control per tick again.
+    if (playbook && target.nodeId === playbook.commit) {
+      return { ...base, confidence: 0, actions: [{ kind: 'clickTrigger', nodeId: target.nodeId }] };
+    }
 
     if (target.kind === 'clickTrigger') {
       return { ...base, confidence: chosen.confidence, actions: [{ kind: 'clickTrigger', nodeId: target.nodeId }] };

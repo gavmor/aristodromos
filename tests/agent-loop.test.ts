@@ -455,3 +455,70 @@ describe('AgentLoop', () => {
     });
   });
 });
+
+describe('AgentLoop dead links', () => {
+  const link = (id: string): SceneNode => ({
+    id,
+    role: 'link',
+    name: id,
+    category: 'action',
+    action: 'navigate',
+    href: `/${id}`,
+    relations: {},
+    perception,
+    actuation: { invokeStrategy: 'click' },
+    order: 0,
+  } as SceneNode);
+  const click = (nodeId: string): Decision => ({
+    decided: true,
+    satisfied: '',
+    remaining: 'go',
+    actions: [{ kind: 'clickTrigger', nodeId: `f0.${nodeId}` }],
+  });
+  const scene = () => sceneWith('d1', link('dead'), link('live'));
+  const offers = (decide: ReturnType<typeof vi.fn>, call: number) =>
+    Object.values((decide.mock.calls[call][0] as Scene).nodes).filter((n) => !n.perception.stalled).map((n) => n.id.replace('f0.', ''));
+
+  it('withholds a trigger the content script reported as moving nothing', async () => {
+    vi.useFakeTimers();
+    const { loop, decide } = harness([click('dead'), done]);
+    loop.ingest({ kind: 'snapshot', scene: scene() });
+    await vi.advanceTimersByTimeAsync(20);
+    loop.ingest({ kind: 'snapshot', scene: scene() }); // content.ts re-offering after didMove() === false
+    await vi.advanceTimersByTimeAsync(20);
+
+    expect(decide).toHaveBeenCalledTimes(2);
+    expect(offers(decide, 0)).toEqual(['dead', 'live']);
+    expect(offers(decide, 1)).toEqual(['live']);
+    vi.useRealTimers();
+  });
+
+  it('withholds it after a silent timeout too, and forgets once the page moves', async () => {
+    vi.useFakeTimers();
+    const { loop, decide } = harness([click('dead'), click('live'), done], { noEffectMs: 1000 });
+    loop.ingest({ kind: 'snapshot', scene: scene() });
+    await vi.advanceTimersByTimeAsync(1020);
+    expect(offers(decide, 1)).toEqual(['live']);
+
+    loop.ingest({ kind: 'patch', documentId: 'd1', ops: [{ op: 'replace', path: '/nodes/live/name', value: 'changed' }] });
+    await vi.advanceTimersByTimeAsync(20);
+    expect(offers(decide, 2)).toEqual(['dead', 'live']);
+    vi.useRealTimers();
+  });
+
+  it('stops, rather than looping, when the only trigger is dead', async () => {
+    vi.useFakeTimers();
+    // Like a real brain, click whatever is still afforded; with nothing left, idle.
+    const decide = vi.fn(async (s: Scene): Promise<Decision> => {
+      const open = Object.values(s.nodes).find((n) => n.category === 'action' && !n.perception.stalled);
+      return open ? click(open.id.replace('f0.', '')) : { decided: false, satisfied: '', remaining: '', actions: [] };
+    });
+    const loop = new AgentLoop({ decide, send: () => {}, record: () => {}, settleMs: 10, noEffectMs: 1000 });
+    loop.ingest({ kind: 'snapshot', scene: sceneWith('d1', link('dead')) });
+    await vi.advanceTimersByTimeAsync(20);
+    loop.ingest({ kind: 'snapshot', scene: sceneWith('d1', link('dead')) });
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(decide).toHaveBeenCalledTimes(2); // the second finds nothing afforded and idles
+    vi.useRealTimers();
+  });
+});

@@ -65,6 +65,7 @@ export const nothingAfforded = (via: string): Decision => ({
 function flags(node: SceneNode): string {
   const set = [
     node.perception.disabled ? 'disabled' : null,
+    node.perception.stalled ? 'no effect when last activated' : null,
     node.perception.inertByModal ? 'behind modal' : null,
   ].filter(Boolean);
   return set.length ? ` [${set.join(', ')}]` : '';
