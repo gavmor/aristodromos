@@ -4,7 +4,7 @@
 import { type ComponentPropsWithoutRef, type ReactNode } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { CheckIcon, ChevronDownIcon } from "lucide-react";
-import { cn } from "@/components/lib/utils";
+import { cn } from "@/components/utils";
 import {
   Popover,
   PopoverContent,

@@ -6,9 +6,9 @@
   "tailwind": { "config": "", "css": "components/ui.css", "baseColor": "neutral", "cssVariables": true, "prefix": "" },
   "aliases": {
     "components": "@/components",
-    "utils": "@/components/lib/utils",
+    "utils": "@/components/utils",
     "ui": "@/components/ui",
-    "lib": "@/components/lib",
+    "lib": "@/components",
     "hooks": "@/components/hooks"
   },
   "iconLibrary": "lucide"

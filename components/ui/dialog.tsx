@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import * as React from "react"
-import { cn } from "@/components/lib/utils"
+import { cn } from "@/components/utils"
 import { XIcon } from "lucide-react"
 import { Dialog as DialogPrimitive } from "radix-ui"
 
