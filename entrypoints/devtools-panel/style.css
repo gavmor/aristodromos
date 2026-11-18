@@ -65,6 +65,18 @@ form {
   border-bottom: 1px solid var(--border);
 }
 
+/* the shared config form, mounted inside its own section */
+section > form {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+details#brain > summary {
+  margin-top: 8px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
 .pill {
   padding: 1px 8px;
   border-radius: 999px;

@@ -6,7 +6,7 @@
 // stream, so an MV3 eviction costs nothing but a reconnect.
 //
 // A loop only decides in a tab the user switched the agent on for (toolbar
-// button or panel; the set lives in `browser.storage.session`) and while the
+// popup or panel; the set lives in `browser.storage.session`) and while the
 // global pause is off. Everywhere else it still perceives, so the panel can
 // show the Scene, but never acts. Goal, brain and pause live in
 // `browser.storage.local`; this worker follows `storage.onChanged`. A panel
@@ -221,14 +221,6 @@ export default defineBackground(() => {
     }
     // A new goal or brain is a new task: every connected page decides afresh.
     if (CONFIG_KEY in changes) for (const { loop } of tabs.values()) loop.retarget();
-  });
-
-  // ACTION: the toolbar icon switches the agent on or off for the tab it is clicked in.
-  browser.action.onClicked.addListener(async (tab) => {
-    if (tab.id === undefined) return;
-    const next = new Set(enabled);
-    if (!next.delete(tab.id)) next.add(tab.id);
-    await writeEnabled(next);
   });
 
   // A closed tab's id is gone for good; drop it from the switched-on set.
