@@ -23,7 +23,6 @@ import {
   type ScenePatch,
 } from '@gavmor/skene/core';
 import { JEV_SYSTEM_ONE, traceDecisions } from '@gavmor/skene/tracing';
-import { createOllama } from 'ollama-ai-provider-v2';
 import type { Browser } from 'wxt/browser';
 import {
   type AgentConfig,
@@ -37,6 +36,7 @@ import {
   TURN_LOG_KEY,
 } from '../utils/agent-config';
 import { AGENT_PORT, INSPECT_PORT, type InspectMessage, type InspectRequest } from '../utils/extension-protocol';
+import { languageModelFor } from '../utils/inference';
 import { tracingFor } from '../utils/tracing';
 import { type LoggedTurn, turnsOf, withOutcome } from '../utils/turn-log';
 
@@ -81,8 +81,7 @@ function setBadge(tabId: number, enabled: boolean, paused: boolean): void {
  */
 function brainFor(config: AgentConfig): Brain {
   const tracing = tracingFor(config.tracing);
-  const ollama = createOllama({ baseURL: config.baseURL });
-  const model = ollama.chat(config.model);
+  const model = languageModelFor(config);
   const slow = aiSdkBrain(model, tracing?.telemetry);
   if (!config.systemOne) return slow;
 

@@ -1,7 +1,3 @@
 {
-  "extends": "./.wxt/tsconfig.json",
-  "exclude": ["demo.ts", ".output"],
-  "compilerOptions": {
-    "allowImportingTsExtensions": true
-  }
+  "extends": "./tsconfig.json"
 }

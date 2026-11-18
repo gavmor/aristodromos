@@ -1,0 +1,25 @@
+/* Tailwind for the vendored React components (the model picker) only: theme and
+   utilities, no preflight, so the extension's own styles are left as they are.
+   Utilities are generated from what components/ uses. shadcn's colour tokens
+   are mapped onto the extension palette (devtools-panel/style.css). */
+@layer theme, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source("./");
+
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+  --color-popover: var(--bg);
+  --color-popover-foreground: var(--fg);
+  --color-accent: var(--surface);
+  --color-accent-foreground: var(--fg);
+  --color-secondary: var(--surface);
+  --color-secondary-foreground: var(--fg);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--bg);
+  --color-muted: var(--surface);
+  --color-muted-foreground: var(--muted);
+  --color-border: var(--border);
+  --color-input: var(--border);
+  --color-ring: var(--accent);
+}

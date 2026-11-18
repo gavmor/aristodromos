@@ -7,6 +7,11 @@
   - `pnpm install` to sync lockfile
 - Version pinned by the `packageManager` field in `package.json`; pnpm settings live in `pnpm-workspace.yaml`.
 
+## UI
+- The popup and DevTools panel are **Preact** function components (`.tsx`, `@preact/preset-vite`).
+- `components/` holds React components vendored via the shadcn CLI (assistant-ui model selector, Radix, cmdk). Each `.tsx` there starts with `/** @jsxImportSource react */` and is typed against `@types/react`; Vite/Vitest alias `react` to `preact/compat`, so no React ships. Keep props crossing into Preact code primitive.
+- One state convention: hooks; storage-backed state goes through `useStorage` (`utils/use-storage.ts`).
+
 ## Commands
 | Command | Action |
 |---|---|
