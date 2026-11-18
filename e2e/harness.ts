@@ -14,6 +14,9 @@ import { chromium } from 'playwright-core';
 import { Builder } from 'selenium-webdriver';
 import firefox from 'selenium-webdriver/firefox.js';
 
+/** E2E_HEADED=1 shows the browser window, so you can watch the agent work. */
+const HEADED = process.env.E2E_HEADED === '1';
+
 export interface Harness {
   /** set the stored config and empty the turn log */
   configure(config: Record<string, unknown>): Promise<void>;
@@ -42,7 +45,7 @@ export async function chromiumHarness(extensionDir: string): Promise<Harness> {
   const profile = await mkdtemp(path.join(tmpdir(), 'aristodromos-e2e-'));
   const context = await chromium.launchPersistentContext(profile, {
     executablePath: process.env.CHROMIUM_PATH ?? '/usr/bin/chromium',
-    headless: true,
+    headless: !HEADED,
     args: [`--disable-extensions-except=${extensionDir}`, `--load-extension=${extensionDir}`, '--no-sandbox'],
   });
   // MV3 service workers can be asleep; wait until one shows up.
@@ -91,8 +94,8 @@ const FIREFOX_UUID = '7d2c1f0e-6a39-4f7e-9d3b-2a1e0c5b8f41';
 export async function firefoxHarness(zip: string): Promise<Harness> {
   const options = new firefox.Options()
     .setBinary(process.env.FIREFOX_PATH ?? '/usr/bin/firefox')
-    .addArguments('-headless')
     .setPreference('extensions.webextensions.uuids', JSON.stringify({ [FIREFOX_ID]: FIREFOX_UUID }));
+  if (!HEADED) options.addArguments('-headless');
   const driver = (await new Builder()
     .forBrowser('firefox')
     .setFirefoxOptions(options)
