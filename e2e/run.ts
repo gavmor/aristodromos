@@ -18,12 +18,23 @@ import { fileURLToPath } from 'node:url';
 import { trainingJsonl } from '@gavmor/skene/training';
 import { type LoggedTurn, verifiedRowsOf } from '../utils/turn-log.ts';
 import { chromiumHarness, firefoxHarness, type Harness } from './harness.ts';
+import { startStubOllama } from './stub-ollama.ts';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 const BROWSER = process.env.E2E_BROWSER === 'firefox' ? 'firefox' : 'chromium';
-// Evidence for Chromium stays where it always was; other browsers get their own.
-const EVIDENCE = path.join(ROOT, 'e2e', 'evidence', ...(BROWSER === 'chromium' ? [] : [BROWSER]));
+/**
+ * `stub` (default): the offline suite. A scripted stand-in answers for the model
+ * (stub-ollama.ts), so a run is fast and deterministic and can reproduce bugs.
+ * `ollama`: the demo. The real local model decides; slow, and worth watching.
+ */
+const BRAIN = process.env.E2E_BRAIN === 'ollama' ? 'ollama' : 'stub';
+// Demo runs are the evidence the repo keeps (Chromium where it always was);
+// offline runs are reproducible, so theirs stays out of git.
+const EVIDENCE =
+  BRAIN === 'ollama'
+    ? path.join(ROOT, 'e2e', 'evidence', ...(BROWSER === 'chromium' ? [] : [BROWSER]))
+    : path.join(ROOT, '.output', 'e2e', BROWSER);
 
 async function launch(): Promise<Harness> {
   if (BROWSER === 'chromium') return chromiumHarness(path.join(ROOT, '.output', 'chrome-mv3'));
@@ -33,7 +44,7 @@ async function launch(): Promise<Harness> {
 
 const GOAL = 'Sign in as alice@example.com with the password hunter2, and remember this device.';
 const EXPECT_EMAIL = 'alice@example.com';
-const DEADLINE_MS = Number(process.env.E2E_DEADLINE_MS ?? 240_000);
+const DEADLINE_MS = Number(process.env.E2E_DEADLINE_MS ?? (BRAIN === 'ollama' ? 900_000 : 120_000));
 
 async function serveFixture(): Promise<{ url: string; close: () => Promise<void> }> {
   const html = await readFile(path.join(HERE, 'fixtures', 'login.html'));
@@ -51,6 +62,8 @@ async function serveFixture(): Promise<{ url: string; close: () => Promise<void>
 
 async function main(): Promise<void> {
   const fixture = await serveFixture();
+  const stub =
+    BRAIN === 'stub' ? await startStubOllama({ delayMs: Number(process.env.E2E_STUB_DELAY_MS ?? 0) }) : undefined;
   const browser = await launch();
 
   try {
@@ -61,7 +74,7 @@ async function main(): Promise<void> {
     await browser.configure({
       goal: GOAL,
       model: process.env.OLLAMA_MODEL ?? 'hf.co/unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_XL',
-      baseURL: process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434/api',
+      baseURL: stub?.baseURL ?? process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434/api',
       ...(collector ? { tracing: { endpoint: collector, project: 'aristodromos-e2e' } } : {}),
       // JEV_BASE_URL puts System One in front, so the run can also yield training rows.
       ...(process.env.JEV_BASE_URL
@@ -76,7 +89,7 @@ async function main(): Promise<void> {
     });
     if (collector) console.log(`[e2e] tracing to ${collector} (project aristodromos-e2e)`);
 
-    console.log(`[e2e] browser: ${BROWSER}`);
+    console.log(`[e2e] browser: ${BROWSER}, brain: ${BRAIN}${stub ? ` (${stub.baseURL})` : ''}`);
     console.log(`[e2e] goal: ${GOAL}`);
     console.log(`[e2e] navigating to ${fixture.url}`);
     await browser.openPage(fixture.url);
@@ -134,7 +147,20 @@ async function main(): Promise<void> {
     console.log(`  trigger withheld at t1:${firstTurn ? firstTurn.afforded.trigger.length === 0 : 'n/a'}`);
     console.log(`  multi-turn sequence:   ${multiStep}`);
     console.log(`  evidence:              ${EVIDENCE}`);
+    // Every question put to the brain must get its answer heard. One the asker
+    // hung up on is a decision that died with the background that asked it.
+    if (stub) {
+      const at = (times: number[]) => times.map((ms) => `${Math.round(ms / 1000)}s`).join(', ') || 'none';
+      console.log(`  brain requests:        ${stub.requests.length} (at ${at(stub.requests)})`);
+      console.log(`  abandoned mid-answer:  ${stub.abandoned.length} (at ${at(stub.abandoned)})`);
+    }
 
+    // A dead decision is the more specific failure, so it is reported first.
+    if (stub && stub.abandoned.length > 0) {
+      throw new Error(
+        `${stub.abandoned.length} decision(s) died before the brain answered: the background was stopped under them`,
+      );
+    }
     if (signedInAs !== EXPECT_EMAIL) {
       throw new Error(`did not converge: expected ${EXPECT_EMAIL}, page reports ${signedInAs ?? 'nothing'}`);
     }
@@ -147,7 +173,7 @@ async function main(): Promise<void> {
       const rows = verifiedRowsOf(turns, turns[0].tabId, `e2e-${new Date().toISOString().replace(/[:.]/g, '-')}`);
       await writeFile(path.join(EVIDENCE, 'training.jsonl'), trainingJsonl(rows));
       console.log(
-        `[e2e] training rows: ${rows.length} (System One turns that moved the page) -> evidence/training.jsonl`,
+        `[e2e] training rows: ${rows.length} (System One turns that moved the page) -> ${path.relative(ROOT, path.join(EVIDENCE, 'training.jsonl'))}`,
       );
     } else {
       console.log('[e2e] no training export: the goal was not fully met (remember-device unset)');
@@ -155,6 +181,7 @@ async function main(): Promise<void> {
   } finally {
     await browser.close();
     await fixture.close();
+    await stub?.close();
   }
 }
 
