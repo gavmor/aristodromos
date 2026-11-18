@@ -246,6 +246,7 @@ e2e/
 | `pnpm build` / `pnpm build:firefox` | Production MV3 build |
 | `pnpm zip` / `pnpm zip:firefox` | Production build, zipped under `.output/` (Firefox also gets the sources zip AMO review asks for) |
 | `pnpm lint:firefox` | Mozilla's `web-ext lint` over the Firefox build |
+| `pnpm start:firefox` | Build, then open Firefox with the add-on installed, in its own profile (`~/.cache/aristodromos/firefox-profile`) that keeps your goal and settings between launches |
 | `pnpm test` | Vitest unit tests |
 | `pnpm typecheck` | `tsc --noEmit` |
 | `pnpm lint` | Biome lint + format check (`pnpm lint:fix` applies) |
@@ -278,8 +279,9 @@ From the [latest release](https://github.com/gavmor/aristodromos/releases/latest
   Temporary Add-on…* with `aristodromos-build-<N>-firefox.zip`. A temporary
   add-on lasts until Firefox restarts. The package is not signed by Mozilla yet,
   so a permanent install needs Developer Edition or Nightly with
-  `xpinstall.signatures.required` set to `false` (`about:config`), or an AMO
-  signature. On install Firefox asks for access to all sites and declares that
+  `xpinstall.signatures.required` set to `false` (`about:config`; release
+  Firefox ignores that pref), or an AMO signature. From a checkout,
+  `pnpm start:firefox` scripts the temporary install instead. On install Firefox asks for access to all sites and declares that
   page content is sent on: to the model server you configure.
 
 ## Prerequisites

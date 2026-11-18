@@ -10,6 +10,7 @@
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
     "lint:firefox": "web-ext lint --source-dir .output/firefox-mv3",
+    "start:firefox": "wxt build -b firefox && mkdir -p \"$HOME/.cache/aristodromos\" && web-ext run --source-dir .output/firefox-mv3 --firefox-profile \"$HOME/.cache/aristodromos/firefox-profile\" --profile-create-if-missing --keep-profile-changes --no-reload --pref extensions.webextensions.keepStorageOnUninstall=true --pref extensions.webextensions.keepUuidOnUninstall=true",
     "compile": "wxt build",
     "postinstall": "wxt prepare",
     "test": "vitest run",
