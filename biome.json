@@ -2,7 +2,16 @@
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
-    "includes": ["entrypoints/**", "utils/**", "tests/**", "e2e/*.ts", "*.ts", "*.json", "!demo.ts"]
+    "includes": [
+      "entrypoints/**",
+      "utils/**",
+      "components/model-picker.tsx",
+      "tests/**",
+      "e2e/*.ts",
+      "*.ts",
+      "*.json",
+      "!demo.ts"
+    ]
   },
   "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2, "lineWidth": 120 },
   "javascript": {
