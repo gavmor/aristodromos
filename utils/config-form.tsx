@@ -13,7 +13,12 @@ import {
   SUGGESTED_SYSTEM_ONE,
   SUGGESTED_TRACING,
 } from './agent-config';
+import { field, inline, labelled, primaryButton } from './ui';
 import { type Stored, useStorage } from './use-storage';
+
+const row = 'flex gap-2';
+const optional = 'group mt-2 min-w-0 rounded-md border border-border px-2 pt-1 pb-2';
+const optionalRow = `${row} group-disabled:opacity-50`;
 
 export interface ConfigFormProps {
   /** the submit button's label */
@@ -120,15 +125,17 @@ export function ConfigForm({ submitLabel, brainOpen = false, afterSave }: Config
   // A disabled fieldset skips validation and is left out of the saved config.
   return (
     <form id="config" onSubmit={submit}>
-      <label>
-        Goal <small>(empty = idle)</small>
-        <textarea id="goal" rows={3} {...text('goal')} />
+      <label class={labelled}>
+        <span>
+          Goal <small class="text-muted-foreground">(empty = idle)</small>
+        </span>
+        <textarea id="goal" rows={3} class={`${field} resize-y`} {...text('goal')} />
       </label>
       <details id="brain" open={brainOpen}>
-        <summary>Brain</summary>
-        <div class="row">
-          <label htmlFor="model-picker">
-            Provider and model{' '}
+        <summary class="mt-2 cursor-pointer text-muted-foreground">Brain</summary>
+        <div class={row}>
+          <label class={labelled} htmlFor="model-picker">
+            Provider and model
             <ModelPicker
               provider={draft.provider}
               model={draft.model}
@@ -138,58 +145,69 @@ export function ConfigForm({ submitLabel, brainOpen = false, afterSave }: Config
             />
           </label>
         </div>
-        <div class="row">
-          <label>
-            Model <input id="model" required {...text('model')} />
+        <div class={row}>
+          <label class={labelled}>
+            Model <input id="model" required class={field} {...text('model')} />
           </label>
-          <label>
-            Base URL <input id="base-url" type="url" required {...text('baseURL')} />
+          <label class={labelled}>
+            Base URL <input id="base-url" type="url" required class={field} {...text('baseURL')} />
           </label>
-          <label>
-            API key <small>(Gemini)</small>{' '}
-            <input id="api-key" type="password" autoComplete="off" {...text('apiKey')} />
+          <label class={labelled}>
+            <span>
+              API key <small class="text-muted-foreground">(Gemini)</small>
+            </span>
+            <input id="api-key" type="password" autoComplete="off" class={field} {...text('apiKey')} />
           </label>
         </div>
-        <fieldset id="so-fields" disabled={!draft.soEnabled}>
-          <legend>
-            <label class="inline">
+        <fieldset id="so-fields" class={optional} disabled={!draft.soEnabled}>
+          <legend class="px-1">
+            <label class={inline}>
               <input id="so-enabled" {...flag('soEnabled')} /> System One in front
             </label>
           </legend>
-          <div class="row">
-            <label>
-              Base URL <input id="so-base-url" type="url" required {...text('soBaseURL')} />
+          <div class={optionalRow}>
+            <label class={labelled}>
+              Base URL <input id="so-base-url" type="url" required class={field} {...text('soBaseURL')} />
             </label>
-            <label>
-              Model <input id="so-model" required {...text('soModel')} />
+            <label class={labelled}>
+              Model <input id="so-model" required class={field} {...text('soModel')} />
             </label>
-            <label>
-              Threshold{' '}
-              <input id="so-threshold" type="number" min="0" max="1" step="0.05" required {...text('soThreshold')} />
+            <label class={labelled}>
+              Threshold
+              <input
+                id="so-threshold"
+                type="number"
+                min="0"
+                max="1"
+                step="0.05"
+                required
+                class={field}
+                {...text('soThreshold')}
+              />
             </label>
           </div>
         </fieldset>
-        <fieldset id="tr-fields" disabled={!draft.trEnabled}>
-          <legend>
-            <label class="inline">
+        <fieldset id="tr-fields" class={optional} disabled={!draft.trEnabled}>
+          <legend class="px-1">
+            <label class={inline}>
               <input id="tr-enabled" {...flag('trEnabled')} /> Trace each decision (OTLP, e.g. Phoenix)
             </label>
           </legend>
-          <div class="row">
-            <label>
-              Traces endpoint <input id="tr-endpoint" type="url" required {...text('trEndpoint')} />
+          <div class={optionalRow}>
+            <label class={labelled}>
+              Traces endpoint <input id="tr-endpoint" type="url" required class={field} {...text('trEndpoint')} />
             </label>
-            <label>
-              Project <input id="tr-project" required {...text('trProject')} />
+            <label class={labelled}>
+              Project <input id="tr-project" required class={field} {...text('trProject')} />
             </label>
           </div>
         </fieldset>
       </details>
-      <div class="actions">
-        <button id="submit-config" type="submit">
+      <div class="mt-2 flex items-center gap-2">
+        <button id="submit-config" type="submit" class={primaryButton}>
           {submitLabel}
         </button>
-        <span id="save-note" class="muted">
+        <span id="save-note" class="text-muted-foreground">
           {note}
         </span>
       </div>

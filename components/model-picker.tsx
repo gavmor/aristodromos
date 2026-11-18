@@ -20,7 +20,6 @@ import {
 } from '@/components/assistant-ui/elements/model-selector';
 import { PROVIDER_LABELS, PROVIDERS, type Provider, SUGGESTED_BASE_URLS } from '@/utils/agent-config';
 import { listModels } from '@/utils/model-catalog';
-import './ui.css';
 
 export interface ModelPickerProps {
   provider: Provider;
@@ -94,7 +93,7 @@ export function ModelPicker({ provider, model, baseURL, apiKey, onPick }: ModelP
       }}
     >
       <ModelSelectorTrigger id="model-picker" type="button" data-provider={provider} />
-      <ModelSelectorContent searchable={false} className="aristodromos-ui">
+      <ModelSelectorContent searchable={false}>
         <ModelSelectorList>
           {groups.map((group) => (
             <ModelSelectorGroup key={group.candidate} heading={group.heading}>
