@@ -60,7 +60,7 @@ async function main(): Promise<void> {
     const collector = process.env.PHOENIX_COLLECTOR_ENDPOINT;
     await browser.configure({
       goal: GOAL,
-      model: process.env.OLLAMA_MODEL ?? 'qwen3-coder-ud-q4kxl:latest',
+      model: process.env.OLLAMA_MODEL ?? 'hf.co/unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_XL',
       baseURL: process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434/api',
       ...(collector ? { tracing: { endpoint: collector, project: 'aristodromos-e2e' } } : {}),
       // JEV_BASE_URL puts System One in front, so the run can also yield training rows.
