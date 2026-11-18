@@ -8,20 +8,10 @@
 import '@andypf/json-viewer';
 import { type PendingDecision, type PlanAction, TabScene, type TurnRecord } from '@gavmor/skene/core';
 import { trainingJsonl } from '@gavmor/skene/training';
-import {
-  type AgentConfig,
-  CONFIG_KEY,
-  DECIDE_NOW_KEY,
-  ENABLED_TABS_KEY,
-  enabledTabsOf,
-  PAUSED_KEY,
-  PENDING_KEY,
-  resolveConfig,
-  SUGGESTED_SYSTEM_ONE,
-  SUGGESTED_TRACING,
-  TURN_LOG_KEY,
-} from '../../utils/agent-config';
+import { ENABLED_TABS_KEY, enabledTabsOf, PAUSED_KEY, PENDING_KEY, TURN_LOG_KEY } from '../../utils/agent-config';
+import { mountConfigForm } from '../../utils/config-form';
 import { INSPECT_PORT, type InspectMessage, type InspectRequest } from '../../utils/extension-protocol';
+import { decideNow, setTabEnabled } from '../../utils/run-control';
 import { type LoggedTurn, turnsOf, verifiedRowsOf } from '../../utils/turn-log';
 
 function el<T extends HTMLElement>(id: string): T {
@@ -42,20 +32,6 @@ const ui = {
   lastSatisfied: el<HTMLElement>('last-satisfied'),
   lastRemaining: el<HTMLElement>('last-remaining'),
   lastError: el<HTMLParagraphElement>('last-error'),
-  form: el<HTMLFormElement>('config'),
-  goal: el<HTMLTextAreaElement>('goal'),
-  model: el<HTMLInputElement>('model'),
-  baseURL: el<HTMLInputElement>('base-url'),
-  soEnabled: el<HTMLInputElement>('so-enabled'),
-  soFields: el<HTMLFieldSetElement>('so-fields'),
-  soBaseURL: el<HTMLInputElement>('so-base-url'),
-  soModel: el<HTMLInputElement>('so-model'),
-  soThreshold: el<HTMLInputElement>('so-threshold'),
-  trEnabled: el<HTMLInputElement>('tr-enabled'),
-  trFields: el<HTMLFieldSetElement>('tr-fields'),
-  trEndpoint: el<HTMLInputElement>('tr-endpoint'),
-  trProject: el<HTMLInputElement>('tr-project'),
-  saveNote: el<HTMLSpanElement>('save-note'),
   allTabs: el<HTMLInputElement>('all-tabs'),
   clearLog: el<HTMLButtonElement>('clear-log'),
   exportRun: el<HTMLButtonElement>('export-run'),
@@ -77,8 +53,9 @@ let onHere = false;
 let turns: LoggedTurn[] = [];
 /** the inspected tab's most recent turn */
 let lastHere: TurnRecord | undefined;
-/** Unsaved edits win over a config change arriving from elsewhere. */
-let dirty = false;
+
+// The goal/brain form: shared with the popup, bound to storage, tab-agnostic.
+mountConfigForm(el('config-slot'), { submitLabel: 'Save and run', brainOpen: true });
 
 // ── run state ────────────────────────────────────────────────────────────────
 
@@ -106,11 +83,7 @@ ui.togglePause.addEventListener('click', () => {
 });
 
 ui.toggleTab.addEventListener('click', () => {
-  void browser.storage.session.get(ENABLED_TABS_KEY).then((stored) => {
-    const next = enabledTabsOf(stored[ENABLED_TABS_KEY]);
-    if (!next.delete(inspectedTabId)) next.add(inspectedTabId);
-    return browser.storage.session.set({ [ENABLED_TABS_KEY]: [...next] });
-  });
+  void setTabEnabled(inspectedTabId);
 });
 
 // ── activity: deciding, or idle and why ──────────────────────────────────────
@@ -155,65 +128,7 @@ function setPending(stored: unknown): void {
 }
 
 ui.decideNow.addEventListener('click', () => {
-  void browser.storage.session.set({ [DECIDE_NOW_KEY]: { tabId: inspectedTabId, at: Date.now() } });
-});
-
-// ── config form ──────────────────────────────────────────────────────────────
-
-function syncOptionalFields(): void {
-  // A disabled fieldset skips validation and is left out of the saved config.
-  ui.soFields.disabled = !ui.soEnabled.checked;
-  ui.trFields.disabled = !ui.trEnabled.checked;
-}
-
-function fillForm(config: AgentConfig): void {
-  ui.goal.value = config.goal;
-  ui.model.value = config.model;
-  ui.baseURL.value = config.baseURL;
-  const systemOne = config.systemOne ?? SUGGESTED_SYSTEM_ONE;
-  ui.soEnabled.checked = config.systemOne !== undefined;
-  ui.soBaseURL.value = systemOne.baseURL;
-  ui.soModel.value = systemOne.model;
-  ui.soThreshold.value = String(systemOne.threshold);
-  const tracing = config.tracing ?? SUGGESTED_TRACING;
-  ui.trEnabled.checked = config.tracing !== undefined;
-  ui.trEndpoint.value = tracing.endpoint;
-  ui.trProject.value = tracing.project;
-  syncOptionalFields();
-  dirty = false;
-}
-
-function readForm(): AgentConfig {
-  const config: AgentConfig = {
-    goal: ui.goal.value.trim(),
-    model: ui.model.value.trim(),
-    baseURL: ui.baseURL.value.trim(),
-  };
-  if (ui.soEnabled.checked) {
-    config.systemOne = {
-      baseURL: ui.soBaseURL.value.trim(),
-      model: ui.soModel.value.trim(),
-      threshold: Number(ui.soThreshold.value),
-    };
-  }
-  if (ui.trEnabled.checked) {
-    config.tracing = { endpoint: ui.trEndpoint.value.trim(), project: ui.trProject.value.trim() };
-  }
-  return config;
-}
-
-ui.soEnabled.addEventListener('change', syncOptionalFields);
-ui.trEnabled.addEventListener('change', syncOptionalFields);
-ui.form.addEventListener('input', () => {
-  dirty = true;
-  ui.saveNote.textContent = 'unsaved';
-});
-ui.form.addEventListener('submit', (event) => {
-  event.preventDefault();
-  void browser.storage.local.set({ [CONFIG_KEY]: readForm() }).then(() => {
-    dirty = false;
-    ui.saveNote.textContent = `saved ${new Date().toLocaleTimeString()}`;
-  });
+  void decideNow(inspectedTabId);
 });
 
 // ── turns ────────────────────────────────────────────────────────────────────
@@ -307,11 +222,9 @@ browser.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   if (PAUSED_KEY in changes) renderPaused(changes[PAUSED_KEY].newValue === true);
   if (TURN_LOG_KEY in changes) setTurns(changes[TURN_LOG_KEY].newValue);
-  if (CONFIG_KEY in changes && !dirty) fillForm(resolveConfig(changes[CONFIG_KEY].newValue));
 });
 
-void browser.storage.local.get([CONFIG_KEY, PAUSED_KEY, TURN_LOG_KEY]).then((stored) => {
-  fillForm(resolveConfig(stored[CONFIG_KEY]));
+void browser.storage.local.get([PAUSED_KEY, TURN_LOG_KEY]).then((stored) => {
   renderPaused(stored[PAUSED_KEY] === true);
   setTurns(stored[TURN_LOG_KEY]);
 });

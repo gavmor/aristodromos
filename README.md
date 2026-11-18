@@ -226,15 +226,19 @@ entrypoints/
 ├── background.ts       # one AgentLoop per tab, over all its frames; follows goal + pause in storage
 ├── content.ts          # projector, Port, reconciler
 ├── devtools/           # registers the DevTools panel
-└── devtools-panel/     # control + status: pause, goal/brain config, turn log, live Scene
+├── devtools-panel/     # control + status: pause, the shared config form, turn log, live Scene
+└── popup/              # toolbar popup: the shared config form, this tab's switch, Start
 utils/
 ├── extension-protocol.ts # Port names + the DevTools panel's inspect protocol
 ├── content-port.ts     # content end of the Port: reconnects after eviction/bfcache, re-announces the Scene
 ├── tracing.ts          # one OTLP provider per endpoint+project: AI SDK telemetry + a tracer
+├── config-form.ts      # the goal/brain form, rendered from storage and following every change to it
+├── run-control.ts      # switch a tab on/off, ask for a decision now
 └── agent-config.ts     # goal + model (+ optional System One), in browser.storage.local
 e2e/
 ├── fixtures/login.html # a form whose submit is disabled until the fields are valid
-├── run.ts              # headless Chromium, real extension, real Ollama
+├── harness.ts          # Chromium (Playwright) or Firefox (geckodriver); starts the run through the popup
+├── run.ts              # real browser, real extension; stub brain offline, real Ollama for the demo
 └── repeat.sh           # run it N times and tally convergence
 ```
 
@@ -251,7 +255,7 @@ e2e/
 | `pnpm typecheck` | `tsc --noEmit` |
 | `pnpm lint` | Biome lint + format check (`pnpm lint:fix` applies) |
 | `pnpm cpd` | Copy-paste detection |
-| `pnpm e2e` / `pnpm e2e:firefox` | Build, then drive a real page headlessly end to end (Firefox installs the release zip as a temporary add-on via geckodriver) |
+| `pnpm e2e` / `pnpm e2e:firefox` | Build, then drive a real page headlessly end to end: the run is configured and started in the toolbar popup's form, as a user would (Firefox installs the release zip as a temporary add-on via geckodriver) |
 
 ## CI and releases
 
@@ -306,20 +310,28 @@ From the [latest release](https://github.com/gavmor/aristodromos/releases/latest
 The agent idles until it is given one — a browser agent with a default goal is an
 agent that starts driving the first page you open.
 
-It also runs **only in tabs you switch it on for**: click the toolbar icon in a
-tab to switch it on or off there (the badge shows ▶, or ⏸ while paused, and is
-blank where it is off), or use the panel's switch. Everywhere else it still
-perceives, so the panel can show the Scene, but it never acts — not even in a
-tab its own click opened. The switched-on tabs live in `enabledTabs` in
-`browser.storage.session`, since a tab id means nothing after a restart, and a
-closed tab drops out.
+It also runs **only in tabs you switch it on for**. The toolbar icon opens a
+popup for the tab it is clicked in: the goal (with the brain settings folded
+under **Brain**), the switch for that tab, and **Start**, which saves the config,
+switches the agent on there and asks for a decision on the page as it is now.
+The badge shows ▶, or ⏸ while paused, and is blank where it is off. Everywhere
+else it still perceives, so the panel can show the Scene, but it never acts —
+not even in a tab its own click opened. The switched-on tabs live in
+`enabledTabs` in `browser.storage.session`, since a tab id means nothing after a
+restart, and a closed tab drops out. The popup page also takes `?tab=<id>`, which
+aims it at that tab instead of the active one: that is how the e2e opens it in a
+tab of its own and starts the run like a user.
 
-The **Aristodromos** tab in DevTools is the control surface: the switch for this
-tab, a global pause/resume, the goal, the Ollama model and base URL, the
-optional System One gate, optional tracing, and a live turn log for the inspected
-tab (or all tabs). **Save and run** applies the config to every tab the agent is on for, with
-a fresh tick budget, without waiting for the page to change. While the inspected
-tab's decision is waiting on the
+The goal/brain form is one module (`utils/config-form.ts`), mounted in both the
+popup and the panel. It renders from `agentConfig` in `browser.storage.local` and
+re-renders on every change there, so no field shows anything but the stored
+config, and it needs no DevTools.
+
+The **Aristodromos** tab in DevTools is the fuller control surface: the switch
+for this tab, a global pause/resume, the same form, and a live turn log for the
+inspected tab (or all tabs). **Save and run** applies the config to every tab the
+agent is on for, with a fresh tick budget, without waiting for the page to
+change. While the inspected tab's decision is waiting on the
 brain, a spinner and elapsed timer show in the panel header; the background
 publishes in-flight decisions to `pending` in `browser.storage.session`. When the
 agent is idle on that tab, the header says why (`goal met`, an error, `no goal

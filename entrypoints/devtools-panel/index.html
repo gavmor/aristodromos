@@ -36,40 +36,9 @@
       <p id="last-error" class="error" hidden></p>
     </section>
 
-    <form id="config">
+    <section id="config-slot">
       <h2>Goal and brain</h2>
-      <label>
-        Goal <small>(empty = idle)</small>
-        <textarea id="goal" rows="3"></textarea>
-      </label>
-      <div class="row">
-        <label>Model <input id="model" required /></label>
-        <label>Ollama base URL <input id="base-url" type="url" required /></label>
-      </div>
-      <fieldset id="so-fields">
-        <legend>
-          <label class="inline"><input id="so-enabled" type="checkbox" /> System One in front</label>
-        </legend>
-        <div class="row">
-          <label>Base URL <input id="so-base-url" type="url" required /></label>
-          <label>Model <input id="so-model" required /></label>
-          <label>Threshold <input id="so-threshold" type="number" min="0" max="1" step="0.05" required /></label>
-        </div>
-      </fieldset>
-      <fieldset id="tr-fields">
-        <legend>
-          <label class="inline"><input id="tr-enabled" type="checkbox" /> Trace each decision (OTLP, e.g. Phoenix)</label>
-        </legend>
-        <div class="row">
-          <label>Traces endpoint <input id="tr-endpoint" type="url" required /></label>
-          <label>Project <input id="tr-project" required /></label>
-        </div>
-      </fieldset>
-      <div class="actions">
-        <button type="submit">Save and run</button>
-        <span id="save-note" class="muted"></span>
-      </div>
-    </form>
+    </section>
 
     <section id="turns">
       <div class="section-head">

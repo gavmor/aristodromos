@@ -16,6 +16,7 @@ import { createServer } from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { trainingJsonl } from '@gavmor/skene/training';
+import type { AgentConfig } from '../utils/agent-config.ts';
 import { type LoggedTurn, verifiedRowsOf } from '../utils/turn-log.ts';
 import { chromiumHarness, firefoxHarness, type Harness } from './harness.ts';
 import { startStubOllama } from './stub-ollama.ts';
@@ -67,11 +68,10 @@ async function main(): Promise<void> {
   const browser = await launch();
 
   try {
-    // Set the goal the way a user would: through the extension's own storage.
     // PHOENIX_COLLECTOR_ENDPOINT (e.g. http://localhost:6006/v1/traces) also
     // traces every decision of the run into the `aristodromos-e2e` project.
     const collector = process.env.PHOENIX_COLLECTOR_ENDPOINT;
-    await browser.configure({
+    const config: AgentConfig = {
       goal: GOAL,
       model: process.env.OLLAMA_MODEL ?? 'hf.co/unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_XL',
       baseURL: stub?.baseURL ?? process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434/api',
@@ -86,7 +86,7 @@ async function main(): Promise<void> {
             },
           }
         : {}),
-    });
+    };
     if (collector) console.log(`[e2e] tracing to ${collector} (project aristodromos-e2e)`);
 
     console.log(`[e2e] browser: ${BROWSER}, brain: ${BRAIN}${stub ? ` (${stub.baseURL})` : ''}`);
@@ -94,9 +94,9 @@ async function main(): Promise<void> {
     console.log(`[e2e] navigating to ${fixture.url}`);
     await browser.openPage(fixture.url);
 
-    // The agent only runs in tabs it is switched on for: switch on this one,
-    // the way the toolbar button would.
-    await browser.enableTabsAt(fixture.url);
+    // Set the goal and start the agent on this tab the way a user would: in
+    // the toolbar popup, with Start.
+    await browser.start(fixture.url, config);
 
     // Converged = the PAGE says so. No polling of agent state.
     const started = Date.now();

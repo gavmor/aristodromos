@@ -2,27 +2,32 @@
 // the e2e scenario needs from it. The scenario (run.ts) is the same for every
 // browser; only how each one is driven differs.
 //
-//   Chromium: Playwright loads the unpacked build and reaches the extension
-//             through its service worker.
+//   Chromium: Playwright loads the unpacked build, opens the popup page in a
+//             tab of its own, and reads the turn log through the service worker.
 //   Firefox:  Playwright cannot load extensions into Firefox, so geckodriver
-//             installs the release zip as a temporary add-on, and the extension
-//             is reached from one of its own pages (a fixed moz-extension UUID).
+//             installs the release zip as a temporary add-on, and the popup page
+//             is opened as a tab (a fixed moz-extension UUID).
+//
+// Either way the agent is configured and started the way a user does it: in
+// the popup's form, with Start. Nothing here writes the extension's storage.
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright-core';
-import { Builder } from 'selenium-webdriver';
+import { Builder, By } from 'selenium-webdriver';
 import firefox from 'selenium-webdriver/firefox.js';
+import type { AgentConfig } from '../utils/agent-config.ts';
 
 /** E2E_HEADED=1 shows the browser window, so you can watch the agent work. */
 const HEADED = process.env.E2E_HEADED === '1';
 
 export interface Harness {
-  /** set the stored config and empty the turn log */
-  configure(config: Record<string, unknown>): Promise<void>;
   openPage(url: string): Promise<void>;
-  /** switch the agent on for every tab at `url`, as the toolbar button would */
-  enableTabsAt(url: string): Promise<void>;
+  /**
+   * Start the agent on the tab at `url` the way a user does: open the popup
+   * for that tab, fill in the form, press Start, and wait for it to run.
+   */
+  start(url: string, config: AgentConfig): Promise<void>;
   /** a global the fixture page sets on itself */
   pageValue(name: string): Promise<unknown>;
   turnLog(): Promise<unknown[]>;
@@ -32,12 +37,44 @@ export interface Harness {
   close(): Promise<void>;
 }
 
+/** One thing a user does in the popup's form. */
+type FormStep = { fill: string; value: string } | { check: string; on: boolean } | { click: string };
+
+/** What a user does in the popup to start `config`, ending with Start. */
+function startSteps(config: AgentConfig): FormStep[] {
+  const { systemOne, tracing } = config;
+  return [
+    { fill: '#goal', value: config.goal },
+    { click: '#brain > summary' },
+    { fill: '#model', value: config.model },
+    { fill: '#base-url', value: config.baseURL },
+    { check: '#so-enabled', on: systemOne !== undefined },
+    ...(systemOne
+      ? [
+          { fill: '#so-base-url', value: systemOne.baseURL },
+          { fill: '#so-model', value: systemOne.model },
+          { fill: '#so-threshold', value: String(systemOne.threshold) },
+        ]
+      : []),
+    { check: '#tr-enabled', on: tracing !== undefined },
+    ...(tracing
+      ? [
+          { fill: '#tr-endpoint', value: tracing.endpoint },
+          { fill: '#tr-project', value: tracing.project },
+        ]
+      : []),
+    { click: '#submit-config' },
+  ];
+}
+
+/** The form has rendered the stored config: typing before that would be overwritten. */
+const FORM_READY = `(document.querySelector('#model')?.value ?? '') !== ''`;
+/** Start took: the popup shows the agent running on its tab. */
+const RUNNING = `document.querySelector('#run-state')?.dataset.state === 'running'`;
+
 /** Declared, not imported: only ever runs inside the extension, never in Node. */
 declare const chrome: {
-  storage: {
-    local: { get(key: string): Promise<Record<string, unknown>>; set(items: Record<string, unknown>): Promise<void> };
-    session: { set(items: Record<string, unknown>): Promise<void> };
-  };
+  storage: { local: { get(key: string): Promise<Record<string, unknown>> } };
   tabs: { query(filter: { url: string }): Promise<{ id?: number }[]> };
 };
 
@@ -62,18 +99,27 @@ export async function chromiumHarness(extensionDir: string): Promise<Harness> {
 
   return {
     consoleLines: async () => consoleLines,
-    configure: (config) =>
-      worker.evaluate(async (agentConfig) => {
-        await chrome.storage.local.set({ agentConfig, turnLog: [] });
-      }, config),
     openPage: async (url) => {
       await page.goto(url, { waitUntil: 'domcontentloaded' });
     },
-    enableTabsAt: (url) =>
-      worker.evaluate(async (at) => {
-        const ids = (await chrome.tabs.query({ url: at })).flatMap((tab) => (tab.id === undefined ? [] : [tab.id]));
-        await chrome.storage.session.set({ enabledTabs: ids });
-      }, url),
+    start: async (url, config) => {
+      const [tabId] = await worker.evaluate(
+        async (at) => (await chrome.tabs.query({ url: at })).flatMap((tab) => (tab.id === undefined ? [] : [tab.id])),
+        url,
+      );
+      if (tabId === undefined) throw new Error(`no tab at ${url}`);
+      const popup = await context.newPage();
+      await popup.goto(`chrome-extension://${new URL(worker.url()).host}/popup.html?tab=${tabId}`);
+      await popup.waitForFunction(FORM_READY);
+      for (const step of startSteps(config)) {
+        if ('fill' in step) await popup.fill(step.fill, step.value);
+        else if ('check' in step) await popup.setChecked(step.check, step.on);
+        else await popup.click(step.click);
+      }
+      await popup.waitForFunction(RUNNING);
+      // A real popup closes once it has done its job.
+      await popup.close();
+    },
     pageValue: (name) => page.evaluate((key) => (window as unknown as Record<string, unknown>)[key], name),
     turnLog: () =>
       worker.evaluate(async () => {
@@ -105,7 +151,7 @@ export async function firefoxHarness(zip: string): Promise<Harness> {
   await driver.installAddon(zip, true);
   console.log(`[e2e] add-on installed in Firefox from ${path.basename(zip)}`);
 
-  // The extension's side: one of its pages, opened as a tab. Marionette will
+  // The extension's side: its popup page, opened as a tab. Marionette will
   // not navigate to moz-extension:// itself, so the browser window opens it.
   await driver.get('about:blank');
   const pageTab = await driver.getWindowHandle();
@@ -113,7 +159,7 @@ export async function firefoxHarness(zip: string): Promise<Harness> {
   await driver.executeScript(
     `const w = Services.wm.getMostRecentWindow('navigator:browser');
      w.gBrowser.addTab(arguments[0], { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });`,
-    `moz-extension://${FIREFOX_UUID}/devtools-panel.html`,
+    `moz-extension://${FIREFOX_UUID}/popup.html`,
   );
   await driver.setContext(firefox.Context.CONTENT);
   let extensionTab: string | undefined;
@@ -163,17 +209,42 @@ export async function firefoxHarness(zip: string): Promise<Harness> {
         await driver.setContext(firefox.Context.CONTENT);
       }
     },
-    configure: (config) =>
-      inExtension<void>('await browser.storage.local.set({ agentConfig: arg, turnLog: [] });', config),
     openPage: (url) => driver.get(url),
-    enableTabsAt: (url) =>
-      inExtension<void>(
-        // tabs.query's url filter is a match pattern, and Firefox's carry no port.
-        `const ids = (await browser.tabs.query({})).filter((t) => t.url === arg).map((t) => t.id);
-         if (ids.length === 0) throw new Error('no tab at ' + arg);
-         await browser.storage.session.set({ enabledTabs: ids });`,
+    start: async (url, config) => {
+      // tabs.query's url filter is a match pattern, and Firefox's carry no port.
+      const tabId = await inExtension<number | undefined>(
+        'return (await browser.tabs.query({})).find((t) => t.url === arg)?.id;',
         url,
-      ),
+      );
+      if (tabId === undefined) throw new Error(`no tab at ${url}`);
+      await driver.switchTo().window(tab);
+      try {
+        await driver.executeScript(`location.search = '?tab=${tabId}';`);
+        await driver.wait(
+          async () =>
+            Boolean(await driver.executeScript(`return location.search === '?tab=${tabId}' && ${FORM_READY};`)),
+          10_000,
+          'the popup never showed the stored config',
+        );
+        for (const step of startSteps(config)) {
+          if ('fill' in step) {
+            const input = await driver.findElement(By.css(step.fill));
+            await input.clear();
+            await input.sendKeys(step.value);
+          } else if ('check' in step) {
+            const box = await driver.findElement(By.css(step.check));
+            if ((await box.isSelected()) !== step.on) await box.click();
+          } else await driver.findElement(By.css(step.click)).click();
+        }
+        await driver.wait(
+          async () => Boolean(await driver.executeScript(`return ${RUNNING};`)),
+          10_000,
+          'Start never took',
+        );
+      } finally {
+        await driver.switchTo().window(pageTab);
+      }
+    },
     pageValue: (name) => driver.executeScript(`return window[arguments[0]];`, name),
     turnLog: () => inExtension<unknown[]>(`return (await browser.storage.local.get('turnLog')).turnLog ?? [];`),
     screenshot: async (file) => {
