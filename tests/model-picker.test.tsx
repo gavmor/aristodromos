@@ -4,7 +4,7 @@
 import { render } from 'preact';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { type AgentConfig, CONFIG_KEY } from '../utils/agent-config';
-import { ConfigForm } from '../utils/config-form';
+import { TabForm } from '../utils/run-switch';
 import { installFakeBrowser, settle } from './fake-browser';
 
 const STORED: AgentConfig = {
@@ -37,7 +37,7 @@ beforeEach(async () => {
   const fake = installFakeBrowser();
   await fake.storage.local.set({ [CONFIG_KEY]: STORED });
   render(null, document.body);
-  render(<ConfigForm submitLabel="Start" />, document.body);
+  render(<TabForm tabId={1} running={false} />, document.body);
   await settle();
 });
 

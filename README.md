@@ -223,11 +223,11 @@ the release URL in `package.json`. To develop both at once: `pnpm link ../skene`
 
 ```
 entrypoints/
-├── background.ts       # one AgentLoop per tab, over all its frames; follows goal + pause in storage
+├── background.ts       # one AgentLoop per tab, over all its frames; follows goal + started tabs in storage
 ├── content.ts          # projector, Port, reconciler
 ├── devtools/           # registers the DevTools panel
-├── devtools-panel/     # Preact: control + status: pause, the shared config form, turn log, live Scene
-└── popup/              # Preact: toolbar popup: the shared config form, this tab's switch, Start
+├── devtools-panel/     # Preact: status, the shared config form with Start/Stop, turn log, live Scene
+└── popup/              # Preact: toolbar popup: the shared config form with this tab's Start/Stop
 utils/
 ├── extension-protocol.ts # Port names + the DevTools panel's inspect protocol
 ├── content-port.ts     # content end of the Port: reconnects after eviction/bfcache, re-announces the Scene
@@ -237,7 +237,7 @@ utils/
 ├── model-catalog.ts    # list a provider's models live
 ├── ui.ts               # Tailwind class sets shared by the popup, panel and form
 ├── use-storage.ts      # the UI's one state hook: a storage key, re-rendered on every change
-├── run-switch.tsx      # a tab's run state + on/off switch, shared by the popup and panel headers
+├── run-switch.tsx      # a tab's run state, and the config form as that tab's Start/Stop toggle
 ├── run-control.ts      # switch a tab on/off, ask for a decision now
 └── agent-config.ts     # goal + model (+ optional System One), in browser.storage.local
 e2e/
@@ -315,17 +315,22 @@ From the [latest release](https://github.com/gavmor/aristodromos/releases/latest
 The agent idles until it is given one — a browser agent with a default goal is an
 agent that starts driving the first page you open.
 
-It also runs **only in tabs you switch it on for**. The toolbar icon opens a
-popup for the tab it is clicked in: the goal (with the brain settings folded
-under **Brain**), the switch for that tab, and **Start**, which saves the config,
-switches the agent on there and asks for a decision on the page as it is now.
-The badge shows ▶, or ⏸ while paused, and is blank where it is off. Everywhere
-else it still perceives, so the panel can show the Scene, but it never acts —
-not even in a tab its own click opened. The switched-on tabs live in
-`enabledTabs` in `browser.storage.session`, since a tab id means nothing after a
-restart, and a closed tab drops out. The popup page also takes `?tab=<id>`, which
-aims it at that tab instead of the active one: that is how the e2e opens it in a
-tab of its own and starts the run like a user.
+It also runs **only in tabs you start it in**, and each tab has one control: a
+**Start/Stop** toggle. The toolbar icon opens a popup for the tab it is clicked
+in: the goal, with the brain settings folded under **Brain**, and the toggle.
+**Start** saves the config, switches the agent on for that tab and asks for a
+decision on the page as it is now; while it runs, the same button reads
+**Stop** and switches it off. Edits made while it runs are applied by Stop, then
+Start. The badge shows ▶ where it runs and is blank elsewhere. Where it is off
+it still perceives, so the panel can show the Scene, but it never acts — not
+even in a tab its own click opened. The tabs it runs in live in `enabledTabs`
+in `browser.storage.session`, since a tab id means nothing after a restart, and
+a closed tab drops out. There is no global pause. The popup page also takes
+`?tab=<id>`, which aims it at that tab instead of the active one: that is how
+the e2e opens it in a tab of its own and starts the run like a user.
+
+There is one goal and brain for every tab: starting one tab with a new goal
+gives that goal to every tab already running, and each decides afresh.
 
 The UI (popup and panel) is Preact function components with hooks, chosen to
 stay small and to be able to host React components through `preact/compat`. The
@@ -356,15 +361,13 @@ background builds the model from `provider` (`ollama-ai-provider-v2`,
 filler (`utils/inference.ts`). The Gemini key is kept in `browser.storage.local`
 and sent only to the Gemini base URL; with Gemini, page content leaves the machine.
 
-The **Aristodromos** tab in DevTools is the fuller control surface: the switch
-for this tab, a global pause/resume, the same form, and a live turn log for the
-inspected tab (or all tabs). **Save and run** applies the config to every tab the
-agent is on for, with a fresh tick budget, without waiting for the page to
-change. While the inspected tab's decision is waiting on the
-brain, a spinner and elapsed timer show in the panel header; the background
-publishes in-flight decisions to `pending` in `browser.storage.session`. When the
-agent is idle on that tab, the header says why (`goal met`, an error, `no goal
-configured`), and **Decide now** runs one fresh decision on the page as it is.
+The **Aristodromos** tab in DevTools is the fuller view of one tab: the same
+form and Start/Stop toggle, the last turn, and a live turn log for the inspected
+tab (or all tabs). While the inspected tab's decision is waiting on the brain, a
+spinner and elapsed timer show in the panel header; the background publishes
+in-flight decisions to `pending` in `browser.storage.session`. When the agent is
+idle on that tab, the header says why (`goal met`, an error, `no goal
+configured`); Stop, then Start, asks for a fresh decision.
 
 The **Scene** section is a live, collapsible view of the inspected tab's Scene:
 the background forwards that tab's snapshot and patch stream over a dedicated
@@ -402,8 +405,6 @@ chrome.storage.local.set({
 });
 ```
 
-The global pause (`paused` in `browser.storage.local`) survives service-worker
-eviction. Resuming, or switching a tab on, decides on the page as it is now.
 Every decision is appended to `turnLog` in `browser.storage.local`, stamped with
 its `tabId`.
 

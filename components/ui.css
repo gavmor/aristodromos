@@ -20,7 +20,6 @@
   --primary-foreground: #ffffff;
   --destructive: #c5221f;
   --running: #2e7d32;
-  --paused: #666666;
 }
 
 :root[data-theme="dark"] {
@@ -34,7 +33,6 @@
   --primary-foreground: #202124;
   --destructive: #f28b82;
   --running: #81c995;
-  --paused: #9aa0a6;
 }
 
 @theme inline {
@@ -55,7 +53,6 @@
   --color-input: var(--border);
   --color-ring: var(--primary);
   --color-running: var(--running);
-  --color-paused: var(--paused);
 }
 
 @layer base {

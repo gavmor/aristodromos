@@ -1,34 +1,42 @@
-// The agent's state on one tab and its on/off switch there, shared by the
-// popup and the panel headers.
-import { ENABLED_TABS_KEY, enabledTabsOf, PAUSED_KEY } from './agent-config';
-import { setTabEnabled } from './run-control';
-import { button } from './ui';
+// The agent's state on one tab, and the one control for it: the shared config
+// form whose button is Start while the agent is off there and Stop while it
+// runs. Shared by the popup and the panel.
+import { ENABLED_TABS_KEY, enabledTabsOf } from './agent-config';
+import { ConfigForm } from './config-form';
+import { decideNow, setTabEnabled } from './run-control';
 import { useStorage } from './use-storage';
 
 const pill = 'rounded-full border px-2 py-px font-semibold';
 const PILL = {
   off: `${pill} border-border text-muted-foreground`,
-  paused: `${pill} border-paused bg-paused text-background`,
   running: `${pill} border-running bg-running text-background`,
 };
 
-/** Whether the agent is on for `tabId`, and the global pause, as stored. */
-export function useRunState(tabId: number): { onHere: boolean; paused: boolean } {
-  const paused = useStorage('local', PAUSED_KEY).value === true;
-  const onHere = enabledTabsOf(useStorage('session', ENABLED_TABS_KEY).value).has(tabId);
-  return { onHere, paused };
+/** Whether the agent is switched on for `tabId`, as stored. */
+export function useRunning(tabId: number): boolean {
+  return enabledTabsOf(useStorage('session', ENABLED_TABS_KEY).value).has(tabId);
 }
 
-export function RunSwitch({ tabId, onHere, paused }: { tabId: number; onHere: boolean; paused: boolean }) {
-  const state = !onHere ? 'off' : paused ? 'paused' : 'running';
+export function RunState({ running }: { running: boolean }) {
+  const state = running ? 'running' : 'off';
   return (
-    <>
-      <span id="run-state" class={PILL[state]} data-state={state}>
-        {{ off: 'Off', paused: 'Paused', running: 'Running' }[state]}
-      </span>
-      <button id="toggle-tab" type="button" class={button} onClick={() => void setTabEnabled(tabId)}>
-        {onHere ? 'Turn off for this tab' : 'Turn on for this tab'}
-      </button>
-    </>
+    <span id="run-state" class={PILL[state]} data-state={state}>
+      {running ? 'Running' : 'Off'}
+    </span>
+  );
+}
+
+/** The config form as the toggle for `tabId`: Start saves, switches on and decides now; Stop switches off. */
+export function TabForm({ tabId, running, brainOpen }: { tabId: number; running: boolean; brainOpen?: boolean }) {
+  return (
+    <ConfigForm
+      brainOpen={brainOpen}
+      running={running}
+      onStart={async () => {
+        await setTabEnabled(tabId, true);
+        await decideNow(tabId);
+      }}
+      onStop={() => setTabEnabled(tabId, false)}
+    />
   );
 }
