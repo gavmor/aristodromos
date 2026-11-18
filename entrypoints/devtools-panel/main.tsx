@@ -5,6 +5,7 @@
 // and storage is the record. The live Scene is the one exception: it changes
 // many times a second, so it streams over an INSPECT_PORT instead, and the
 // panel folds it into its own replica exactly as the background does.
+import '../../components/ui.css';
 import '@andypf/json-viewer';
 import { type PendingDecision, type PlanAction, TabScene, type TurnRecord } from '@gavmor/skene/core';
 import { trainingJsonl } from '@gavmor/skene/training';
@@ -16,7 +17,15 @@ import { INSPECT_PORT, type InspectMessage, type InspectRequest } from '../../ut
 import { decideNow } from '../../utils/run-control';
 import { RunSwitch, useRunState } from '../../utils/run-switch';
 import { type LoggedTurn, turnsOf, verifiedRowsOf } from '../../utils/turn-log';
+import { button, header, heading, inline, section, title } from '../../utils/ui';
 import { useStorage } from '../../utils/use-storage';
+
+const cell = 'border-b border-border px-1.5 py-0.5 text-left align-top';
+const th = `${cell} font-semibold text-muted-foreground`;
+/** #, time, ms, via: short, kept on one line */
+const cellShort = `${cell} whitespace-nowrap`;
+const cellText = `${cell} whitespace-pre-wrap wrap-anywhere`;
+const cellCode = `${cell} whitespace-pre-wrap break-words font-mono`;
 
 const inspectedTabId = browser.devtools.inspectedWindow.tabId;
 const dark = browser.devtools.panels.themeName === 'dark';
@@ -42,8 +51,16 @@ function Thinking({ pending }: { pending: PendingDecision | undefined }) {
   }, [pending]);
   const seconds = pending ? (Date.now() - pending.startedAt) / 1000 : 0;
   return (
-    <span id="thinking" class="thinking" role="status" hidden={!pending}>
-      <span class="spinner" aria-hidden="true" />
+    <span
+      id="thinking"
+      class="inline-flex items-center gap-1.5 text-primary tabular-nums"
+      role="status"
+      hidden={!pending}
+    >
+      <span
+        class="size-3 animate-spin rounded-full border-2 border-border border-t-primary motion-reduce:[animation-duration:2.4s]"
+        aria-hidden="true"
+      />
       <span id="thinking-label">{pending ? `Deciding #${pending.tick} · ${seconds.toFixed(1)} s` : ''}</span>
     </span>
   );
@@ -64,9 +81,9 @@ function describeVia(turn: TurnRecord): string {
 
 function Status({ last }: { last: TurnRecord | undefined }) {
   return (
-    <section id="status">
-      <h2>This tab</h2>
-      <dl>
+    <section id="status" class={section}>
+      <h2 class={heading}>This tab</h2>
+      <dl class="mt-1.5 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5 [&_dd]:wrap-anywhere [&_dt]:text-muted-foreground">
         <dt>Last turn</dt>
         <dd id="last-turn">
           {last ? `#${last.tick} at ${new Date(last.at).toLocaleTimeString()}, ${last.ms} ms — ${last.url}` : '—'}
@@ -76,7 +93,7 @@ function Status({ last }: { last: TurnRecord | undefined }) {
         <dt>Remaining</dt>
         <dd id="last-remaining">{last?.remaining || '—'}</dd>
       </dl>
-      <p id="last-error" class="error" hidden={!last?.error}>
+      <p id="last-error" class="text-destructive" hidden={!last?.error}>
         {last?.error ?? ''}
       </p>
     </section>
@@ -112,10 +129,10 @@ function Turns({ turns }: { turns: LoggedTurn[] }) {
   };
 
   return (
-    <section id="turns">
-      <div class="section-head">
-        <h2>Turns</h2>
-        <label class="inline">
+    <section id="turns" class={section}>
+      <div class="flex items-center gap-3">
+        <h2 class={`${heading} flex-1`}>Turns</h2>
+        <label class={inline}>
           <input
             id="all-tabs"
             type="checkbox"
@@ -125,6 +142,7 @@ function Turns({ turns }: { turns: LoggedTurn[] }) {
           all tabs
         </label>
         <button
+          class={button}
           id="export-run"
           type="button"
           title="This tab's logged run reached its goal: download its System One answers as Jeff training rows (JSONL)"
@@ -132,38 +150,42 @@ function Turns({ turns }: { turns: LoggedTurn[] }) {
         >
           Run succeeded: export
         </button>
-        <button id="clear-log" type="button" onClick={clearLog}>
+        <button id="clear-log" type="button" class={button} onClick={clearLog}>
           Clear log
         </button>
       </div>
-      <p id="export-note" class="muted" hidden={exportNote === undefined}>
+      <p id="export-note" class="text-muted-foreground" hidden={exportNote === undefined}>
         {exportNote ?? ''}
       </p>
-      <table>
+      <table class="mt-1.5 w-full border-collapse">
         <thead>
           <tr>
-            <th>#</th>
-            <th>Time</th>
-            <th>ms</th>
-            <th>Via</th>
-            <th>Remaining</th>
-            <th>Actions</th>
+            <th class={th}>#</th>
+            <th class={th}>Time</th>
+            <th class={th}>ms</th>
+            <th class={th}>Via</th>
+            <th class={th}>Remaining</th>
+            <th class={th}>Actions</th>
           </tr>
         </thead>
         <tbody id="turn-rows">
           {shown.toReversed().map((turn) => (
-            <tr key={`${turn.tabId}-${turn.at}-${turn.tick}`} class={turn.error ? 'error' : undefined} title={turn.url}>
-              <td>{String(turn.tick)}</td>
-              <td>{new Date(turn.at).toLocaleTimeString()}</td>
-              <td>{String(turn.ms)}</td>
-              <td>{describeVia(turn)}</td>
-              <td>{turn.error ?? (turn.done ? 'goal met' : turn.remaining)}</td>
-              <td>{turn.actions.map(describeAction).join('\n')}</td>
+            <tr
+              key={`${turn.tabId}-${turn.at}-${turn.tick}`}
+              class={turn.error ? 'text-destructive' : undefined}
+              title={turn.url}
+            >
+              <td class={cellShort}>{String(turn.tick)}</td>
+              <td class={cellShort}>{new Date(turn.at).toLocaleTimeString()}</td>
+              <td class={cellShort}>{String(turn.ms)}</td>
+              <td class={cellShort}>{describeVia(turn)}</td>
+              <td class={cellText}>{turn.error ?? (turn.done ? 'goal met' : turn.remaining)}</td>
+              <td class={cellCode}>{turn.actions.map(describeAction).join('\n')}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      <p id="no-turns" class="muted" hidden={shown.length > 0}>
+      <p id="no-turns" class="text-muted-foreground" hidden={shown.length > 0}>
         No turns yet.
       </p>
     </section>
@@ -229,16 +251,16 @@ function SceneView() {
   if (scene) lastShown.current = scene;
   const frameCount = scene ? Object.keys(scene.frames).length : 0;
   return (
-    <details id="scene" open>
-      <summary>
-        <h2>Scene</h2>
-        <span id="scene-meta" class="muted">
+    <details id="scene" class="py-2.5" open>
+      <summary class="flex cursor-pointer items-baseline gap-3">
+        <h2 class={heading}>Scene</h2>
+        <span id="scene-meta" class="truncate text-muted-foreground">
           {scene
             ? `${Object.keys(scene.nodes).length} nodes${frameCount > 1 ? ` in ${frameCount} frames` : ''} · ${scene.title || scene.url}`
             : ''}
         </span>
       </summary>
-      <div id="scene-view" hidden={scene === null}>
+      <div id="scene-view" class="mt-1.5" hidden={scene === null}>
         <andypf-json-viewer
           expanded={1}
           indent={2}
@@ -251,7 +273,7 @@ function SceneView() {
           data={lastShown.current}
         />
       </div>
-      <p id="no-scene" class="muted" hidden={scene !== null}>
+      <p id="no-scene" class="text-muted-foreground" hidden={scene !== null}>
         No Scene for this tab yet. If the extension was just reloaded, reload the page.
       </p>
     </details>
@@ -275,10 +297,11 @@ function Panel() {
 
   return (
     <>
-      <header>
-        <h1>Aristodromos</h1>
+      <header class={header}>
+        <h1 class={title}>Aristodromos</h1>
         <RunSwitch tabId={inspectedTabId} onHere={onHere} paused={paused} />
         <button
+          class={button}
           id="toggle-pause"
           type="button"
           title="Pause or resume the agent in every tab it is on for"
@@ -286,11 +309,11 @@ function Panel() {
         >
           {paused ? 'Resume all' : 'Pause all'}
         </button>
-        <div class="activity">
+        <div class="ml-auto flex min-w-0 items-center gap-2">
           <Thinking pending={pending} />
           <span
             id="idle"
-            class="idle"
+            class="truncate text-muted-foreground"
             role="status"
             hidden={reason === undefined}
             title={reason === undefined ? '' : `${reason} — waiting for the page to change`}
@@ -298,6 +321,7 @@ function Panel() {
             {reason === undefined ? '' : `Idle: ${reason}`}
           </span>
           <button
+            class={button}
             id="decide-now"
             type="button"
             title="One fresh decision on this tab's page as it is now"
@@ -311,8 +335,8 @@ function Panel() {
 
       <Status last={lastHere} />
 
-      <section id="config-slot">
-        <h2>Goal and brain</h2>
+      <section id="config-slot" class={section}>
+        <h2 class={heading}>Goal and brain</h2>
         {/* The goal/brain form: shared with the popup, bound to storage, tab-agnostic. */}
         <ConfigForm submitLabel="Save and run" brainOpen />
       </section>

@@ -235,6 +235,7 @@ utils/
 ├── config-form.tsx     # the goal/brain form (Preact), rendered from storage and following every change to it
 ├── inference.ts        # the AI SDK model for a config's provider (Ollama, OpenAI-compatible, Gemini)
 ├── model-catalog.ts    # list a provider's models live
+├── ui.ts               # Tailwind class sets shared by the popup, panel and form
 ├── use-storage.ts      # the UI's one state hook: a storage key, re-rendered on every change
 ├── run-switch.tsx      # a tab's run state + on/off switch, shared by the popup and panel headers
 ├── run-control.ts      # switch a tab on/off, ask for a decision now

@@ -1,27 +1,65 @@
-/* Tailwind in full for the vendored React components (the model picker).
-   Layer order is declared by each page's app.css; it is repeated here so it
-   holds whichever stylesheet loads first. Utilities are generated from what
-   components/ uses. shadcn's colour tokens map onto the extension palette
-   (devtools-panel/style.css). */
-@layer theme, base, app, components, utilities;
-@import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/preflight.css" layer(base);
-@import "tailwindcss/utilities.css" layer(utilities) source("./");
+/* The extension's one stylesheet: Tailwind, for the Preact pages and the
+   vendored React components alike. Colours are shadcn's token names, so the
+   vendored components and our own markup draw from the same palette; each page
+   sets `data-theme` on <html> from the browser's (or DevTools') theme. */
+@import "tailwindcss" source(none);
+@source "../entrypoints";
+@source "../utils";
+@source "./";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root {
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #1f1f1f;
+  --muted: #f3f3f3;
+  --muted-foreground: #6b6b6b;
+  --border: #d0d0d0;
+  --primary: #1a73e8;
+  --primary-foreground: #ffffff;
+  --destructive: #c5221f;
+  --running: #2e7d32;
+  --paused: #666666;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #202124;
+  --foreground: #e3e3e3;
+  --muted: #292a2d;
+  --muted-foreground: #9aa0a6;
+  --border: #3c4043;
+  --primary: #8ab4f8;
+  --primary-foreground: #202124;
+  --destructive: #f28b82;
+  --running: #81c995;
+  --paused: #9aa0a6;
+}
 
 @theme inline {
-  --color-background: var(--bg);
-  --color-foreground: var(--fg);
-  --color-popover: var(--bg);
-  --color-popover-foreground: var(--fg);
-  --color-accent: var(--surface);
-  --color-accent-foreground: var(--fg);
-  --color-secondary: var(--surface);
-  --color-secondary-foreground: var(--fg);
-  --color-primary: var(--accent);
-  --color-primary-foreground: var(--bg);
-  --color-muted: var(--surface);
-  --color-muted-foreground: var(--muted);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-popover: var(--background);
+  --color-popover-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--muted);
+  --color-accent-foreground: var(--foreground);
+  --color-secondary: var(--muted);
+  --color-secondary-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-destructive: var(--destructive);
   --color-border: var(--border);
   --color-input: var(--border);
-  --color-ring: var(--accent);
+  --color-ring: var(--primary);
+  --color-running: var(--running);
+  --color-paused: var(--paused);
+}
+
+@layer base {
+  body {
+    @apply bg-background px-3 pt-2 pb-4 font-sans text-xs/[1.4] text-foreground;
+  }
 }

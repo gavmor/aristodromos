@@ -1,5 +1,0 @@
-/* Cascade order for every extension page: Tailwind's theme and preflight, then
-   the extension's own styles, then Tailwind utilities, so the vendored
-   components (components/) render as designed wherever the two overlap. */
-@layer theme, base, app, components, utilities;
-@import "./style.css" layer(app);
