@@ -233,6 +233,8 @@ utils/
 ├── content-port.ts     # content end of the Port: reconnects after eviction/bfcache, re-announces the Scene
 ├── tracing.ts          # one OTLP provider per endpoint+project: AI SDK telemetry + a tracer
 ├── config-form.tsx     # the goal/brain form (Preact), rendered from storage and following every change to it
+├── inference.ts        # the AI SDK model for a config's provider (Ollama, OpenAI-compatible, Gemini)
+├── model-catalog.ts    # list a provider's models live
 ├── use-storage.ts      # the UI's one state hook: a storage key, re-rendered on every change
 ├── run-switch.tsx      # a tab's run state + on/off switch, shared by the popup and panel headers
 ├── run-control.ts      # switch a tab on/off, ask for a decision now
@@ -330,6 +332,28 @@ goal/brain form is one component (`utils/config-form.tsx`), rendered in both the
 popup and the panel. It renders from `agentConfig` in `browser.storage.local` and
 re-renders on every change there, so no field shows anything but the stored
 config, and it needs no DevTools.
+
+### Providers
+
+Under **Brain**, **Provider and model** is assistant-ui's
+[model selector](https://www.assistant-ui.com/elements/model-selector) in its
+standalone mode, run through `preact/compat`. Opening it asks every provider for
+its models, grouped by provider; picking one sets `provider`, `model` and
+`baseURL` in the form, saved with the rest. A provider that does not answer is
+shown with the reason in its heading, and nothing in it can be picked.
+
+| `provider` | `baseURL` (what the AI SDK provider takes) | Models listed from | Key |
+|---|---|---|---|
+| `ollama` (default) | `http://localhost:11434/api` | `GET {baseURL}/tags` | none |
+| `openai-compatible` (LM Studio, vLLM, llama.cpp server) | `http://localhost:1234/v1` | `GET {baseURL}/models` | none |
+| `gemini` (Google Gemini API) | `https://generativelanguage.googleapis.com/v1beta` | `GET {baseURL}/models`, chat models only | **API key** field |
+
+The provider in use is listed at the configured base URL, the others at the URL
+in this table. A config stored before providers existed runs on Ollama. The
+background builds the model from `provider` (`ollama-ai-provider-v2`,
+`@ai-sdk/openai-compatible`, `@ai-sdk/google`) for both the brain and the value
+filler (`utils/inference.ts`). The Gemini key is kept in `browser.storage.local`
+and sent only to the Gemini base URL; with Gemini, page content leaves the machine.
 
 The **Aristodromos** tab in DevTools is the fuller control surface: the switch
 for this tab, a global pause/resume, the same form, and a live turn log for the

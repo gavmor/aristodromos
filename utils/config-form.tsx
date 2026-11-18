@@ -4,7 +4,15 @@
 // nothing of DevTools or of any tab: whoever renders it decides what saving means
 // beyond storing the config.
 import { useState } from 'preact/hooks';
-import { type AgentConfig, CONFIG_KEY, resolveConfig, SUGGESTED_SYSTEM_ONE, SUGGESTED_TRACING } from './agent-config';
+import { ModelPicker } from '../components/model-picker';
+import {
+  type AgentConfig,
+  CONFIG_KEY,
+  type Provider,
+  resolveConfig,
+  SUGGESTED_SYSTEM_ONE,
+  SUGGESTED_TRACING,
+} from './agent-config';
 import { type Stored, useStorage } from './use-storage';
 
 export interface ConfigFormProps {
@@ -19,8 +27,10 @@ export interface ConfigFormProps {
 /** The fields as typed: what is shown until the next save or the next change in storage. */
 interface Draft {
   goal: string;
+  provider: Provider;
   model: string;
   baseURL: string;
+  apiKey: string;
   soEnabled: boolean;
   soBaseURL: string;
   soModel: string;
@@ -35,8 +45,10 @@ function draftOf(config: AgentConfig): Draft {
   const tracing = config.tracing ?? SUGGESTED_TRACING;
   return {
     goal: config.goal,
+    provider: config.provider,
     model: config.model,
     baseURL: config.baseURL,
+    apiKey: config.apiKey ?? '',
     soEnabled: config.systemOne !== undefined,
     soBaseURL: systemOne.baseURL,
     soModel: systemOne.model,
@@ -48,7 +60,13 @@ function draftOf(config: AgentConfig): Draft {
 }
 
 function configOf(draft: Draft): AgentConfig {
-  const config: AgentConfig = { goal: draft.goal.trim(), model: draft.model.trim(), baseURL: draft.baseURL.trim() };
+  const config: AgentConfig = {
+    goal: draft.goal.trim(),
+    provider: draft.provider,
+    model: draft.model.trim(),
+    baseURL: draft.baseURL.trim(),
+  };
+  if (draft.apiKey.trim()) config.apiKey = draft.apiKey.trim();
   if (draft.soEnabled) {
     config.systemOne = {
       baseURL: draft.soBaseURL.trim(),
@@ -109,11 +127,27 @@ export function ConfigForm({ submitLabel, brainOpen = false, afterSave }: Config
       <details id="brain" open={brainOpen}>
         <summary>Brain</summary>
         <div class="row">
+          <label htmlFor="model-picker">
+            Provider and model{' '}
+            <ModelPicker
+              provider={draft.provider}
+              model={draft.model}
+              baseURL={draft.baseURL}
+              apiKey={draft.apiKey}
+              onPick={(provider, model, baseURL) => edit({ provider, model, baseURL })}
+            />
+          </label>
+        </div>
+        <div class="row">
           <label>
             Model <input id="model" required {...text('model')} />
           </label>
           <label>
-            Ollama base URL <input id="base-url" type="url" required {...text('baseURL')} />
+            Base URL <input id="base-url" type="url" required {...text('baseURL')} />
+          </label>
+          <label>
+            API key <small>(Gemini)</small>{' '}
+            <input id="api-key" type="password" autoComplete="off" {...text('apiKey')} />
           </label>
         </div>
         <fieldset id="so-fields" disabled={!draft.soEnabled}>

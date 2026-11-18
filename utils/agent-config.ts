@@ -6,9 +6,19 @@
 // "no goal configured", and the loop idles until someone sets one.
 export interface AgentConfig {
   goal: string;
-  /** Ollama tag. The model the other local agents already keep loaded, so it is resident rather than swapped in. */
+  /** Which kind of server `baseURL` is. A config stored before this existed reads as `ollama`. */
+  provider: Provider;
+  /** The model id on that server: an Ollama tag, or an OpenAI-compatible model id. */
   model: string;
+  /**
+   * The server root as its AI SDK provider takes it: Ollama's ends in `/api`
+   * (`/chat`, `/tags` are appended), an OpenAI-compatible one in `/v1`
+   * (`/chat/completions`, `/models` are appended), Gemini's in `/v1beta`
+   * (`/models/<id>:generateContent`, `/models` are appended).
+   */
   baseURL: string;
+  /** Gemini's API key; the local providers take none. Kept in `browser.storage.local`. */
+  apiKey?: string;
   /**
    * Optional System-One decider in FRONT of the Ollama brain. Absent by
    * default, which is the pre-existing behaviour exactly: one `generateObject`
@@ -66,10 +76,33 @@ export const PENDING_KEY = 'pending';
  */
 export const DECIDE_NOW_KEY = 'decideNow';
 
+/**
+ * Inference providers. `openai-compatible` covers local servers such as LM
+ * Studio, vLLM and llama.cpp's server (no key); `gemini` is Google's Gemini API
+ * (needs `apiKey`).
+ */
+export type Provider = 'ollama' | 'openai-compatible' | 'gemini';
+
+export const PROVIDERS: readonly Provider[] = ['ollama', 'openai-compatible', 'gemini'];
+
+export const PROVIDER_LABELS: Record<Provider, string> = {
+  ollama: 'Ollama',
+  'openai-compatible': 'OpenAI-compatible',
+  gemini: 'Gemini',
+};
+
+/** Where each provider's server usually listens; the picker lists a provider not in use from here. */
+export const SUGGESTED_BASE_URLS: Record<Provider, string> = {
+  ollama: 'http://localhost:11434/api',
+  'openai-compatible': 'http://localhost:1234/v1',
+  gemini: 'https://generativelanguage.googleapis.com/v1beta',
+};
+
 export const DEFAULT_CONFIG: AgentConfig = {
   goal: '',
+  provider: 'ollama',
   model: 'hf.co/unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_XL',
-  baseURL: 'http://localhost:11434/api',
+  baseURL: SUGGESTED_BASE_URLS.ollama,
 };
 
 /** The stored value laid over the defaults; storage may hold a partial config or nothing. */

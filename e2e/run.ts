@@ -73,6 +73,7 @@ async function main(): Promise<void> {
     const collector = process.env.PHOENIX_COLLECTOR_ENDPOINT;
     const config: AgentConfig = {
       goal: GOAL,
+      provider: 'ollama',
       model: process.env.OLLAMA_MODEL ?? 'hf.co/unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_XL',
       baseURL: stub?.baseURL ?? process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434/api',
       ...(collector ? { tracing: { endpoint: collector, project: 'aristodromos-e2e' } } : {}),
