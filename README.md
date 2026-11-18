@@ -246,6 +246,7 @@ e2e/
 | `pnpm build` / `pnpm build:firefox` | Production MV3 build |
 | `pnpm zip` / `pnpm zip:firefox` | Production build, zipped under `.output/` (Firefox also gets the sources zip AMO review asks for) |
 | `pnpm lint:firefox` | Mozilla's `web-ext lint` over the Firefox build |
+| `pnpm start:firefox` | Build, then open Firefox with the add-on installed, in its own profile (`~/.cache/aristodromos/firefox-profile`) that keeps your goal and settings between launches |
 | `pnpm test` | Vitest unit tests |
 | `pnpm typecheck` | `tsc --noEmit` |
 | `pnpm lint` | Biome lint + format check (`pnpm lint:fix` applies) |
@@ -278,17 +279,17 @@ From the [latest release](https://github.com/gavmor/aristodromos/releases/latest
   Temporary Add-on…* with `aristodromos-build-<N>-firefox.zip`. A temporary
   add-on lasts until Firefox restarts. The package is not signed by Mozilla yet,
   so a permanent install needs Developer Edition or Nightly with
-  `xpinstall.signatures.required` set to `false` (`about:config`), or an AMO
-  signature. On install Firefox asks for access to all sites and declares that
+  `xpinstall.signatures.required` set to `false` (`about:config`; release
+  Firefox ignores that pref), or an AMO signature. From a checkout,
+  `pnpm start:firefox` scripts the temporary install instead. On install Firefox asks for access to all sites and declares that
   page content is sent on: to the model server you configure.
 
 ## Prerequisites
 
 - **pnpm**, at the version pinned by `packageManager` in `package.json`
 - **Ollama** on `localhost:11434` (override with `OLLAMA_BASE_URL`, e.g.
-  `http://192.168.0.20:11434/api`) with `qwen3-coder-ud-q4kxl:latest`
-  (Qwen3-Coder-30B-A3B, ~17 GB — MoE, 3B active, fast enough to sit in a
-  per-observation loop)
+  `http://192.168.0.20:11434/api`) with `hf.co/unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_XL`
+  (Qwen3.8-27B, ~20 GB; override with `OLLAMA_MODEL`, or per user in the panel)
 - Chromium at `/usr/bin/chromium` for `pnpm e2e` (override with `CHROMIUM_PATH`);
   Firefox at `/usr/bin/firefox` for `pnpm e2e:firefox` (override with `FIREFOX_PATH`;
   geckodriver is fetched by Selenium Manager)
@@ -338,7 +339,7 @@ The same state lives in `browser.storage.local`, so it can also be set directly:
 chrome.storage.local.set({
   agentConfig: {
     goal: 'Sign in as alice@example.com with the password hunter2.',
-    model: 'qwen3-coder-ud-q4kxl:latest',
+    model: 'hf.co/unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_XL',
     baseURL: 'http://localhost:11434/api',
 
     // Optional. Omit it and the Ollama brain decides every turn, as before.

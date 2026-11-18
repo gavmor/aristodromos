@@ -6,7 +6,7 @@
 // "no goal configured", and the loop idles until someone sets one.
 export interface AgentConfig {
   goal: string;
-  /** Ollama tag. Tool-tuned MoE: right verb, 3B active params, fast enough to loop. */
+  /** Ollama tag. The model the other local agents already keep loaded, so it is resident rather than swapped in. */
   model: string;
   baseURL: string;
   /**
@@ -68,7 +68,7 @@ export const DECIDE_NOW_KEY = 'decideNow';
 
 export const DEFAULT_CONFIG: AgentConfig = {
   goal: '',
-  model: 'qwen3-coder-ud-q4kxl:latest',
+  model: 'hf.co/unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_XL',
   baseURL: 'http://localhost:11434/api',
 };
 
