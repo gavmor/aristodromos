@@ -51,12 +51,10 @@ export interface TracingSettings {
 
 export const CONFIG_KEY = 'agentConfig';
 export const TURN_LOG_KEY = 'turnLog';
-/** Global pause across every enabled tab, set from the devtools panel. */
-export const PAUSED_KEY = 'paused';
 /**
- * The tabs the agent is switched on for, in `browser.storage.session` (a tab
- * id means nothing once the browser restarts): `number[]`. It runs nowhere
- * else, not even in a tab its own click opened.
+ * The tabs the agent was started in, in `browser.storage.session` (a tab id
+ * means nothing once the browser restarts): `number[]`. It runs nowhere else,
+ * not even in a tab its own click opened.
  */
 export const ENABLED_TABS_KEY = 'enabledTabs';
 
@@ -71,7 +69,7 @@ export function enabledTabsOf(stored: unknown): Set<number> {
  */
 export const PENDING_KEY = 'pending';
 /**
- * A "Decide now" request from the panel, in `browser.storage.session`:
+ * A request for one decision now, sent by Start, in `browser.storage.session`:
  * `{ tabId, at }`. `at` makes a repeated request a change the background sees.
  */
 export const DECIDE_NOW_KEY = 'decideNow';

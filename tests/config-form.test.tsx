@@ -4,7 +4,7 @@
 import { render } from 'preact';
 import { beforeEach, expect, it } from 'vitest';
 import { type AgentConfig, CONFIG_KEY } from '../utils/agent-config';
-import { ConfigForm } from '../utils/config-form';
+import { TabForm } from '../utils/run-switch';
 import { type FakeBrowser, installFakeBrowser, settle } from './fake-browser';
 
 const STORED: AgentConfig = {
@@ -42,7 +42,7 @@ function fieldsOf(): AgentConfig {
 /** The shared form, mounted the way the popup and the panel mount it, with no DevTools around it. */
 function renderForm(): void {
   render(null, document.body);
-  render(<ConfigForm submitLabel="Start" />, document.body);
+  render(<TabForm tabId={1} running={false} />, document.body);
 }
 
 let fake: FakeBrowser;

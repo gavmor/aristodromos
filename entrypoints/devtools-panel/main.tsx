@@ -11,11 +11,9 @@ import { type PendingDecision, type PlanAction, TabScene, type TurnRecord } from
 import { trainingJsonl } from '@gavmor/skene/training';
 import { render } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { PAUSED_KEY, PENDING_KEY, TURN_LOG_KEY } from '../../utils/agent-config';
-import { ConfigForm } from '../../utils/config-form';
+import { PENDING_KEY, TURN_LOG_KEY } from '../../utils/agent-config';
 import { INSPECT_PORT, type InspectMessage, type InspectRequest } from '../../utils/extension-protocol';
-import { decideNow } from '../../utils/run-control';
-import { RunSwitch, useRunState } from '../../utils/run-switch';
+import { RunState, TabForm, useRunning } from '../../utils/run-switch';
 import { type LoggedTurn, turnsOf, verifiedRowsOf } from '../../utils/turn-log';
 import { button, header, heading, inline, section, title } from '../../utils/ui';
 import { useStorage } from '../../utils/use-storage';
@@ -283,8 +281,8 @@ function SceneView() {
 // ── the panel ────────────────────────────────────────────────────────────────
 
 function Panel() {
-  /** whether the agent is switched on for the inspected tab, and the global pause */
-  const { onHere, paused } = useRunState(inspectedTabId);
+  /** whether the agent is switched on for the inspected tab */
+  const running = useRunning(inspectedTabId);
   const turns = turnsOf(useStorage('local', TURN_LOG_KEY).value);
   const pendingStored = useStorage('session', PENDING_KEY).value;
   const pending = Array.isArray(pendingStored)
@@ -293,22 +291,13 @@ function Panel() {
   /** the inspected tab's most recent turn */
   const lastHere = turns.findLast((turn) => turn.tabId === inspectedTabId);
 
-  const reason = pending || paused || !onHere ? undefined : idleReason(lastHere);
+  const reason = pending || !running ? undefined : idleReason(lastHere);
 
   return (
     <>
       <header class={header}>
         <h1 class={title}>Aristodromos</h1>
-        <RunSwitch tabId={inspectedTabId} onHere={onHere} paused={paused} />
-        <button
-          class={button}
-          id="toggle-pause"
-          type="button"
-          title="Pause or resume the agent in every tab it is on for"
-          onClick={() => void browser.storage.local.set({ [PAUSED_KEY]: !paused })}
-        >
-          {paused ? 'Resume all' : 'Pause all'}
-        </button>
+        <RunState running={running} />
         <div class="ml-auto flex min-w-0 items-center gap-2">
           <Thinking pending={pending} />
           <span
@@ -320,16 +309,6 @@ function Panel() {
           >
             {reason === undefined ? '' : `Idle: ${reason}`}
           </span>
-          <button
-            class={button}
-            id="decide-now"
-            type="button"
-            title="One fresh decision on this tab's page as it is now"
-            disabled={!onHere || paused || pending !== undefined}
-            onClick={() => void decideNow(inspectedTabId)}
-          >
-            Decide now
-          </button>
         </div>
       </header>
 
@@ -337,8 +316,8 @@ function Panel() {
 
       <section id="config-slot" class={section}>
         <h2 class={heading}>Goal and brain</h2>
-        {/* The goal/brain form: shared with the popup, bound to storage, tab-agnostic. */}
-        <ConfigForm submitLabel="Save and run" brainOpen />
+        {/* The goal/brain form, shared with the popup: its button starts and stops the agent on this tab. */}
+        <TabForm tabId={inspectedTabId} running={running} brainOpen />
       </section>
 
       <Turns turns={turns} />

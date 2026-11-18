@@ -1,8 +1,8 @@
 // The goal/brain/System One/tracing form, shared by the DevTools panel and the
 // toolbar popup. It renders from `browser.storage.local` and re-renders on every
-// change there, so no field can show anything but the stored config. It knows
-// nothing of DevTools or of any tab: whoever renders it decides what saving means
-// beyond storing the config.
+// change there, so no field can show anything but the stored config. Its one
+// button is the agent's toggle: Start stores the config and starts, Stop stops.
+// What starting and stopping mean (which tab) is up to whoever renders it.
 import { useState } from 'preact/hooks';
 import { ModelPicker } from '../components/model-picker';
 import {
@@ -21,12 +21,13 @@ const optional = 'group mt-2 min-w-0 rounded-md border border-border px-2 pt-1 p
 const optionalRow = `${row} group-disabled:opacity-50`;
 
 export interface ConfigFormProps {
-  /** the submit button's label */
-  submitLabel: string;
   /** show the brain settings expanded */
   brainOpen?: boolean;
+  /** the agent is running, so the button stops it */
+  running: boolean;
   /** run after the config is stored; its failure is shown beside the button */
-  afterSave?: (config: AgentConfig) => Promise<void>;
+  onStart: (config: AgentConfig) => Promise<void>;
+  onStop: () => Promise<void>;
 }
 
 /** The fields as typed: what is shown until the next save or the next change in storage. */
@@ -86,7 +87,7 @@ function configOf(draft: Draft): AgentConfig {
 type TextKey = { [K in keyof Draft]: Draft[K] extends string ? K : never }[keyof Draft];
 type FlagKey = Exclude<keyof Draft, TextKey>;
 
-export function ConfigForm({ submitLabel, brainOpen = false, afterSave }: ConfigFormProps) {
+export function ConfigForm({ brainOpen = false, running, onStart, onStop }: ConfigFormProps) {
   const stored = useStorage('local', CONFIG_KEY);
   const [note, setNote] = useState('');
   // Storage is the record: every change to it is what the form shows. Typing
@@ -98,7 +99,7 @@ export function ConfigForm({ submitLabel, brainOpen = false, afterSave }: Config
 
   const edit = (patch: Partial<Draft>): void => {
     setEdited((current) => ({ from: stored, draft: { ...draftFrom(current), ...patch } }));
-    setNote('unsaved');
+    setNote(running ? 'unsaved: Stop, then Start, to apply' : 'unsaved');
   };
   const text = (key: TextKey) => ({
     value: draft[key],
@@ -110,16 +111,19 @@ export function ConfigForm({ submitLabel, brainOpen = false, afterSave }: Config
     onChange: (event: Event) => edit({ [key]: (event.currentTarget as HTMLInputElement).checked }),
   });
 
+  const settle = (work: Promise<void>, done: string): void => {
+    void work.then(
+      () => setNote(done),
+      (error: unknown) => setNote(`failed: ${String(error)}`),
+    );
+  };
   const submit = (event: Event): void => {
     event.preventDefault();
     const config = configOf(draft);
-    void browser.storage.local
-      .set({ [CONFIG_KEY]: config })
-      .then(() => afterSave?.(config))
-      .then(
-        () => setNote(`saved ${new Date().toLocaleTimeString()}`),
-        (error: unknown) => setNote(`failed: ${String(error)}`),
-      );
+    settle(
+      browser.storage.local.set({ [CONFIG_KEY]: config }).then(() => onStart(config)),
+      `started ${new Date().toLocaleTimeString()}`,
+    );
   };
 
   // A disabled fieldset skips validation and is left out of the saved config.
@@ -204,9 +208,22 @@ export function ConfigForm({ submitLabel, brainOpen = false, afterSave }: Config
         </fieldset>
       </details>
       <div class="mt-2 flex items-center gap-2">
-        <button id="submit-config" type="submit" class={primaryButton}>
-          {submitLabel}
-        </button>
+        {/* Keyed: one click must not land on a button that has just changed what it does. */}
+        {running ? (
+          <button
+            key="stop"
+            id="submit-config"
+            type="button"
+            class={primaryButton}
+            onClick={() => settle(onStop(), 'stopped')}
+          >
+            Stop
+          </button>
+        ) : (
+          <button key="start" id="submit-config" type="submit" class={primaryButton}>
+            Start
+          </button>
+        )}
         <span id="save-note" class="text-muted-foreground">
           {note}
         </span>
