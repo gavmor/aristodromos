@@ -1,9 +1,11 @@
-/* Tailwind for the vendored React components (the model picker) only: theme and
-   utilities, no preflight, so the extension's own styles are left as they are.
-   Utilities are generated from what components/ uses. shadcn's colour tokens
-   are mapped onto the extension palette (devtools-panel/style.css). */
-@layer theme, utilities;
+/* Tailwind in full for the vendored React components (the model picker).
+   Layer order is declared by each page's app.css; it is repeated here so it
+   holds whichever stylesheet loads first. Utilities are generated from what
+   components/ uses. shadcn's colour tokens map onto the extension palette
+   (devtools-panel/style.css). */
+@layer theme, base, app, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
 @import "tailwindcss/utilities.css" layer(utilities) source("./");
 
 @theme inline {

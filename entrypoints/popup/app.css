@@ -1,0 +1,4 @@
+/* See devtools-panel/app.css for the layer order. */
+@layer theme, base, app, components, utilities;
+@import "../devtools-panel/style.css" layer(app);
+@import "./style.css" layer(app);
