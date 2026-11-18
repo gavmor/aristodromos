@@ -226,13 +226,15 @@ entrypoints/
 ├── background.ts       # one AgentLoop per tab, over all its frames; follows goal + pause in storage
 ├── content.ts          # projector, Port, reconciler
 ├── devtools/           # registers the DevTools panel
-├── devtools-panel/     # control + status: pause, the shared config form, turn log, live Scene
-└── popup/              # toolbar popup: the shared config form, this tab's switch, Start
+├── devtools-panel/     # Preact: control + status: pause, the shared config form, turn log, live Scene
+└── popup/              # Preact: toolbar popup: the shared config form, this tab's switch, Start
 utils/
 ├── extension-protocol.ts # Port names + the DevTools panel's inspect protocol
 ├── content-port.ts     # content end of the Port: reconnects after eviction/bfcache, re-announces the Scene
 ├── tracing.ts          # one OTLP provider per endpoint+project: AI SDK telemetry + a tracer
-├── config-form.ts      # the goal/brain form, rendered from storage and following every change to it
+├── config-form.tsx     # the goal/brain form (Preact), rendered from storage and following every change to it
+├── use-storage.ts      # the UI's one state hook: a storage key, re-rendered on every change
+├── run-switch.tsx      # a tab's run state + on/off switch, shared by the popup and panel headers
 ├── run-control.ts      # switch a tab on/off, ask for a decision now
 └── agent-config.ts     # goal + model (+ optional System One), in browser.storage.local
 e2e/
@@ -322,7 +324,9 @@ restart, and a closed tab drops out. The popup page also takes `?tab=<id>`, whic
 aims it at that tab instead of the active one: that is how the e2e opens it in a
 tab of its own and starts the run like a user.
 
-The goal/brain form is one module (`utils/config-form.ts`), mounted in both the
+The UI (popup and panel) is Preact function components with hooks, chosen to
+stay small and to be able to host React components through `preact/compat`. The
+goal/brain form is one component (`utils/config-form.tsx`), rendered in both the
 popup and the panel. It renders from `agentConfig` in `browser.storage.local` and
 re-renders on every change there, so no field shows anything but the stored
 config, and it needs no DevTools.

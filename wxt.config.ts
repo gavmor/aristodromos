@@ -1,9 +1,12 @@
+import preact from '@preact/preset-vite';
 import { defineConfig } from 'wxt';
 
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   manifestVersion: 3,
   srcDir: '.',
+  // The popup and panel are Preact function components (TSX).
+  vite: () => ({ plugins: [preact()] }),
   // The Firefox sources zip is for AMO review; WXT does not read .gitignore,
   // so local, ignored files are kept out here.
   zip: { excludeSources: ['ruvector.db', 'lib/**', '*.local', '.env', '.env.*'] },

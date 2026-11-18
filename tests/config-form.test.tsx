@@ -1,9 +1,10 @@
 // The config form outside DevTools (the popup, or the panel page opened as a
 // plain tab) must show exactly what storage holds: a field that disagrees with
 // the stored config is a form that lies about what the agent will do.
+import { render } from 'preact';
 import { beforeEach, expect, it } from 'vitest';
 import { type AgentConfig, CONFIG_KEY } from '../utils/agent-config';
-import { mountConfigForm } from '../utils/config-form';
+import { ConfigForm } from '../utils/config-form';
 import { type FakeBrowser, installFakeBrowser, settle } from './fake-browser';
 
 const STORED: AgentConfig = {
@@ -36,8 +37,8 @@ function fieldsOf(): AgentConfig {
 
 /** The shared form, mounted the way the popup and the panel mount it, with no DevTools around it. */
 function renderForm(): void {
-  document.body.replaceChildren();
-  mountConfigForm(document.body, { submitLabel: 'Start' });
+  render(null, document.body);
+  render(<ConfigForm submitLabel="Start" />, document.body);
 }
 
 let fake: FakeBrowser;

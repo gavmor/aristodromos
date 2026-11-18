@@ -2,6 +2,8 @@
   "extends": "./.wxt/tsconfig.json",
   "exclude": ["demo.ts", ".output"],
   "compilerOptions": {
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact"
   }
 }

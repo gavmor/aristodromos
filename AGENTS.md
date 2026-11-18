@@ -7,6 +7,10 @@
   - `pnpm install` to sync lockfile
 - Version pinned by the `packageManager` field in `package.json`; pnpm settings live in `pnpm-workspace.yaml`.
 
+## UI
+- The popup and DevTools panel are **Preact** function components (`.tsx`, `@preact/preset-vite`).
+- One state convention: hooks; storage-backed state goes through `useStorage` (`utils/use-storage.ts`).
+
 ## Commands
 | Command | Action |
 |---|---|
